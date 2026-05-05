@@ -12,11 +12,16 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Cont
 # ══ AYARLAR — SADECE SEN DEĞİŞTİR ══════════════════════════════
 import os
 
-OKX_API_KEY    = os.environ.get("OKX_API_KEY", "85e88111-f54f-4d99-95f3-7aae64584b19")
-OKX_SECRET     = os.environ.get("OKX_SECRET", "DB25F58C43BCA18E6B710C33F0B63A33")
-OKX_PASSPHRASE = os.environ.get("OKX_PASSPHRASE", "Pamuk2013. ")
-TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "8739819284:AAHMosHpNypRodg066Bdrg1EvZqfuNowI70")
-TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "1543653839")
+OKX_API_KEY      = os.environ.get("OKX_API_KEY",      "")
+OKX_SECRET       = os.environ.get("OKX_SECRET",       "")
+OKX_PASSPHRASE   = os.environ.get("OKX_PASSPHRASE",   "")
+TELEGRAM_TOKEN   = os.environ.get("TELEGRAM_TOKEN",   "")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
+
+if not all([OKX_API_KEY, OKX_SECRET, OKX_PASSPHRASE, TELEGRAM_TOKEN]):
+    print("⚠️  UYARI: Çevre değişkenleri eksik!")
+    print("    OKX_API_KEY, OKX_SECRET, OKX_PASSPHRASE, TELEGRAM_TOKEN ayarlanmamış.")
+    print("    Lokalde test için: set OKX_API_KEY=... komutu kullan")
 
 OKX_BASE = "https://www.okx.com"
 
