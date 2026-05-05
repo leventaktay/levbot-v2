@@ -1,0 +1,26 @@
+{
+  "min_volume_usdt": 10000000,
+  "min_market_cap": 0,
+  "max_market_cap": 0,
+  "max_coins": 50,
+  "scan_interval_min": 10,
+  "timeframes": [
+    "1h",
+    "4h",
+    "1d"
+  ],
+  "min_signal_count": 2,
+  "sound_alerts": true,
+  "exchange": "Otomatik",
+  "use_rsi": true,
+  "use_wavetrend": true,
+  "use_bb": true,
+  "use_t3": true,
+  "use_volume": true,
+  "use_hammer": true,
+  "use_hanging": true,
+  "use_doji": true,
+  "use_marubozu": true,
+  "use_morning": true,
+  "use_evening": true
+}

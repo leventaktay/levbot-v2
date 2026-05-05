@@ -1,0 +1,836 @@
+// ╔══════════════════════════════════════════════════════════════╗
+// ║        LEVBOT INDUCEMENT SHIELD v2.0                       ║
+// ║      Liquidity Zone Entry + 15M Candle + WaveTrend         ║
+// ║      + Trading Sessions + Overlap Detection                ║
+// ╚══════════════════════════════════════════════════════════════╝
+//
+// MİMARİ DEĞİŞİKLİK (v2.0):
+// v1.x: "Büyük mum bul → zone çiz → bekle"
+// v2.0: "Likidite nerede → orası zone → mum ne yapıyor bak"
+//
+// NEDEN? Çünkü zone'lara gelmeden ortaya çıkan mumlar bir şey
+// ifade etmez. Likidite = mıknatıs. Smart money likiditeyi takip eder.
+//
+// YENİ ZONE MANTIĞI:
+// 4H swing high = supply zone (short stop'lar üstte birikir)
+// 4H swing low  = demand zone (long stop'lar altta birikir)
+// 1D swing pivot ile çakışırsa = GÜÇLENDİRİLMİŞ zone (★)
+//
+// HİYERARŞİ:
+// 1D → Yapısal yön (BOS/CHoCH + çapraz filtre)
+// 4H → Swing pivot zone tespiti (likidite havuzları)
+// 15M → Entry tetikleyici (candle pattern + WaveTrend + OI)
+//
+// SİNYAL AKIŞI:
+// 4H swing pivot → zone çizilir → fiyat zone'a dokunur → ⚠️
+// → 15M'de candle pattern + OI engel yok → LONG/SHORT
+// → WaveTrend/Sweep/Squeeze/OI Div bonus → ⚡ güç
+//
+// CHANGELOG:
+// v1.6: Entry TF 1H → 15M
+// v1.7: OI blocking fix, zone sweep toleransı, zone-aware cooldown, OI div
+// v2.0: Zone tespiti tamamen yeniden yazıldı — impulse mum → swing pivot
+//       + 1D pivot confluence ile güçlendirilmiş zone desteği
+//       + Zone yaş takibi (eski zone'lar soluklaşır)
+
+//@version=5
+indicator("LevBot Inducement Shield v2.0",
+     overlay            = true,
+     max_labels_count    = 500,
+     max_boxes_count     = 500,
+     max_lines_count     = 500,
+     max_bars_back       = 500)
+
+
+// ══════════════════════════════════════════
+//  AYARLAR
+// ══════════════════════════════════════════
+
+// --- Modüller ---
+mod1_on    = input.bool(true,  "📊 OI Divergence (bilgi)",        group="🔧 Modüller")
+mod2_on    = input.bool(true,  "📉 BB Squeeze (bilgi + bonus)",   group="🔧 Modüller")
+mod3_on    = input.bool(true,  "🎯 Sweep Detection (bonus)",      group="🔧 Modüller")
+mod4_on    = input.bool(true,  "🟦 Liquidity Zones + Entry",      group="🔧 Modüller")
+mod5_on    = input.bool(true,  "🔺 1D BOS/CHoCH",                 group="🔧 Modüller")
+xfilter_on = input.bool(true,  "🛡️ Çapraz Filtre",                group="🔧 Modüller")
+
+// --- L/S Sinyal ---
+ls_only     = input.bool(true,  "👁️ Sadece L/S Göster", group="🚦 L/S Sinyal")
+ls_cooldown = input.int(96, "L/S Soğutma (mum)", minval=1, maxval=500, group="🚦 L/S Sinyal", tooltip="96 mum = 24 saat")
+
+// --- Soğutma ---
+cd_oi      = input.int(48, "OI Div Soğutma", minval=1, maxval=200, group="⏱️ Soğutma", tooltip="48 mum = 12 saat")
+cd_sweep   = input.int(32, "Sweep Soğutma", minval=1, maxval=200, group="⏱️ Soğutma", tooltip="32 mum = 8 saat")
+cd_squeeze = input.int(48, "Squeeze Soğutma", minval=1, maxval=200, group="⏱️ Soğutma", tooltip="48 mum = 12 saat")
+
+// --- Open Interest ---
+oi_sym      = input.symbol("BINANCE:BTCUSDT.P_OI", "OI Sembolü", group="📊 Open Interest", tooltip="ETHUSDT.P_OI gibi değiştir")
+oi_weak     = input.float(1.5,  "Zayıf Eşik (%)",   step=0.5, group="📊 Open Interest")
+oi_strong   = input.float(3.0,  "Güçlü Eşik (%)",   step=0.5, group="📊 Open Interest")
+oi_lookback = input.int(24, "OI Periyodu", minval=2, maxval=100, group="📊 Open Interest", tooltip="24 mum = 6 saat")
+
+// --- Swing ---
+sw_entry = input.int(12, "15M Swing Lookback", minval=2, maxval=40, group="📐 Swing", tooltip="12 mum = 3 saat")
+sw_1d    = input.int(3,  "1D Swing Lookback",  minval=2, maxval=10, group="📐 Swing")
+sw_sweep = input.int(8,  "Sweep Pivot",        minval=2, maxval=20, group="📐 Swing", tooltip="8 mum = 2 saat")
+
+// --- Bollinger Bands ---
+bb_len    = input.int(20,    "BB Periyodu",      group="📉 BB")
+bb_mult   = input.float(2.0, "BB Std Sapma",    group="📉 BB")
+sq_pctile = input.int(20,    "Squeeze %",       minval=5, maxval=50, group="📉 BB")
+vol_spike = input.float(2.0, "Volume Çarpanı",  step=0.5, group="📉 BB")
+
+// --- Liquidity Zones (v2.0 YENİ) ---
+sw_4h       = input.int(5,    "4H Pivot Lookback",     minval=2, maxval=20, group="🟦 Liquidity Zones", tooltip="5 = son 5 muma bak (20 saat)")
+zone_width  = input.float(0.3, "Zone Genişliği (ATR×)", step=0.1, minval=0.1, maxval=1.0, group="🟦 Liquidity Zones", tooltip="Pivot etrafında zone genişliği")
+zone_sweep_tol = input.float(0.5, "Sweep Toleransı (ATR×)", step=0.1, minval=0.1, maxval=1.5, group="🟦 Liquidity Zones", tooltip="Zone kırılma toleransı")
+atr_len    = input.int(14,    "ATR Periyodu",           group="🟦 Liquidity Zones")
+d1_confluence = input.bool(true, "1D Pivot Confluence ★", group="🟦 Liquidity Zones", tooltip="1D pivot ile çakışan zone'lar güçlendirilir")
+confluence_tol = input.float(1.0, "Confluence Toleransı (ATR×)", step=0.1, group="🟦 Liquidity Zones", tooltip="1D pivot ile zone arasındaki max mesafe")
+
+// --- Renkler ---
+col_bull    = input.color(color.new(#00E676, 0),  "Bullish",      group="🎨 Renkler")
+col_bear    = input.color(color.new(#FF1744, 0),  "Bearish",      group="🎨 Renkler")
+col_warn    = input.color(color.new(#FFD600, 0),  "Uyarı",        group="🎨 Renkler")
+col_neutral = input.color(color.new(#90A4AE, 0),  "Nötr",         group="🎨 Renkler")
+col_dzone   = input.color(color.new(#00E676, 85), "Demand Zone",  group="🎨 Renkler")
+col_szone   = input.color(color.new(#FF1744, 85), "Supply Zone",  group="🎨 Renkler")
+col_dzone_strong = input.color(color.new(#00E676, 70), "Demand Zone ★", group="🎨 Renkler")
+col_szone_strong = input.color(color.new(#FF1744, 70), "Supply Zone ★", group="🎨 Renkler")
+col_long    = input.color(color.new(#00C853, 0),  "LONG",         group="🎨 Renkler")
+col_short   = input.color(color.new(#D50000, 0),  "SHORT",        group="🎨 Renkler")
+
+// --- Sessions ---
+sess_on     = input.bool(true, "🕐 Session Göster", group="🕐 Sessions")
+sess_bg     = input.bool(true, "Chart Arka Plan", group="🕐 Sessions", tooltip="Sadece overlap saatlerinde")
+sess_utc    = input.int(3, "Saat Dilimi (UTC+)", minval=-12, maxval=14, group="🕐 Sessions", tooltip="Istanbul = UTC+3")
+
+col_asia    = input.color(color.new(#9C27B0, 95), "🌏 Asya",     group="🕐 Sessions")
+col_europe  = input.color(color.new(#2196F3, 95), "🌍 Avrupa",   group="🕐 Sessions")
+col_us      = input.color(color.new(#FF9800, 95), "🌎 ABD",      group="🕐 Sessions")
+col_overlap = input.color(color.new(#F44336, 95), "🔥 Overlap",  group="🕐 Sessions")
+
+// --- WaveTrend ---
+wt_ch_len  = input.int(9,   "Channel Length",  minval=1, maxval=20, group="〰️ WaveTrend")
+wt_avg_len = input.int(12,  "Average Length",   minval=1, maxval=20, group="〰️ WaveTrend")
+wt_ob      = input.int(60,  "Overbought",       minval=20, maxval=100, group="〰️ WaveTrend")
+wt_os      = input.int(-60, "Oversold",          minval=-100, maxval=-20, group="〰️ WaveTrend")
+
+
+// ══════════════════════════════════════════
+//  VERİ ÇEKİMİ
+// ══════════════════════════════════════════
+
+// OI
+oi_val = request.security(oi_sym, timeframe.period, close)
+
+// 1D pivotlar (yapısal yön + confluence için)
+d_pvt_hi = request.security(syminfo.tickerid, "1D", ta.pivothigh(high, sw_1d, sw_1d))
+d_pvt_lo = request.security(syminfo.tickerid, "1D", ta.pivotlow(low,  sw_1d, sw_1d))
+
+// 4H pivotlar — v2.0 YENİ: zone tespiti için
+h4_pvt_hi = request.security(syminfo.tickerid, "240", ta.pivothigh(high, sw_4h, sw_4h))
+h4_pvt_lo = request.security(syminfo.tickerid, "240", ta.pivotlow(low,   sw_4h, sw_4h))
+
+// 4H ATR — zone genişliği ve tolerans için
+h4_atr = request.security(syminfo.tickerid, "240", ta.atr(atr_len))
+
+// Mevcut TF ATR
+atr_val = ta.atr(atr_len)
+
+
+// ══════════════════════════════════════════
+//  OI HESAPLAMA
+// ══════════════════════════════════════════
+
+oi_prev    = nz(oi_val[oi_lookback])
+oi_chg_pct = oi_prev > 0 ? ((nz(oi_val) - oi_prev) / oi_prev) * 100.0 : 0.0
+
+oi_state = oi_chg_pct >= oi_strong ?  2 :
+           oi_chg_pct >= oi_weak   ?  1 :
+           oi_chg_pct <= -oi_strong? -2 :
+           oi_chg_pct <= -oi_weak  ? -1 : 0
+
+// v1.7 FIX: OI düşerken short engellenMEMELİ
+bool oi_blocks_long  = oi_state <= -2
+bool oi_blocks_short = oi_state >= 2
+
+// v1.7: OI divergence tespiti
+bool oi_bearish_div = oi_state <= -1 and close > close[oi_lookback]
+bool oi_bullish_div = oi_state <= -1 and close < close[oi_lookback]
+
+
+// ══════════════════════════════════════════
+//  SESSION TESPİTİ
+// ══════════════════════════════════════════
+
+utc_hour = hour(time, "UTC+0")
+
+bool in_asia   = utc_hour >= 0  and utc_hour < 9
+bool in_europe = utc_hour >= 7  and utc_hour < 16
+bool in_us     = utc_hour >= 13 and utc_hour < 22
+
+bool in_asia_eu_overlap = utc_hour >= 7  and utc_hour < 9
+bool in_eu_us_overlap   = utc_hour >= 13 and utc_hour < 16
+bool in_any_overlap     = in_asia_eu_overlap or in_eu_us_overlap
+
+var string sess_name = ""
+sess_name := "🌙 KAPALI"
+if in_eu_us_overlap
+    sess_name := "🔥 EU+US"
+else if in_asia_eu_overlap
+    sess_name := "🔥 AS+EU"
+else if in_us
+    sess_name := "🌎 ABD"
+else if in_europe
+    sess_name := "🌍 EU"
+else if in_asia
+    sess_name := "🌏 ASYA"
+else
+    sess_name := "🌙 KAPALI"
+
+color sess_bg_col = na
+if sess_on and sess_bg
+    if in_eu_us_overlap or in_asia_eu_overlap
+        sess_bg_col := col_overlap
+
+
+// ══════════════════════════════════════════
+//  WAVETREND HESAPLAMA
+// ══════════════════════════════════════════
+
+hlc3_val = hlc3
+esa      = ta.ema(hlc3_val, wt_ch_len)
+d_wt     = ta.ema(math.abs(hlc3_val - esa), wt_ch_len)
+ci       = (hlc3_val - esa) / (0.015 * d_wt)
+wt1      = ta.ema(ci, wt_avg_len)
+wt2      = ta.sma(wt1, 4)
+
+bool wt_bull_cross = ta.crossover(wt1, wt2)
+bool wt_bear_cross = ta.crossunder(wt1, wt2)
+bool wt_oversold   = wt1 <= wt_os
+bool wt_overbought = wt1 >= wt_ob
+
+int bars_since_bull_cross = ta.barssince(wt_bull_cross)
+int bars_since_bear_cross = ta.barssince(wt_bear_cross)
+bool wt_recent_bull = not na(bars_since_bull_cross) and bars_since_bull_cross <= 12
+bool wt_recent_bear = not na(bars_since_bear_cross) and bars_since_bear_cross <= 12
+
+bool wt_supports_long  = wt_oversold or wt_recent_bull
+bool wt_supports_short = wt_overbought or wt_recent_bear
+
+var string wt_status = ""
+wt_status := wt_overbought ? "OB" : wt_oversold ? "OS" : "—"
+
+
+// ══════════════════════════════════════════
+//  SOĞUTMA SİSTEMİ
+// ══════════════════════════════════════════
+
+var int last_oi_bar      = -9999
+var int last_sweep_bar   = -9999
+var int last_squeeze_bar = -9999
+var int last_long_bar    = -9999
+var int last_short_bar   = -9999
+var int last_sweep_bull  = -9999
+var int last_sweep_bear  = -9999
+
+// v1.7: Zone bazlı cooldown
+var int last_long_zone_idx  = -1
+var int last_short_zone_idx = -1
+
+
+// ══════════════════════════════════════════
+//  CANDLE PATTERN TESPİTİ
+// ══════════════════════════════════════════
+// Hammer, Shooting Star, Bullish/Bearish Engulfing, Güçlü Kapanış
+
+body_size    = math.abs(close - open)
+upper_shadow = high - math.max(close, open)
+lower_shadow = math.min(close, open) - low
+total_range  = high - low
+min_body     = atr_val * 0.1
+
+bool is_pin_down = body_size > min_body and
+                   lower_shadow >= body_size * 1.5 and
+                   upper_shadow <= total_range * 0.30
+
+bool is_pin_up = body_size > min_body and
+                 upper_shadow >= body_size * 1.5 and
+                 lower_shadow <= total_range * 0.30
+
+bool is_bull_engulf = close > open and
+                      close[1] < open[1] and
+                      body_size > min_body and
+                      close >= open[1] and
+                      open <= close[1]
+
+bool is_bear_engulf = close < open and
+                      close[1] > open[1] and
+                      body_size > min_body and
+                      open >= close[1] and
+                      close <= open[1]
+
+bool strong_bull_close = close > open and body_size > atr_val * 0.5
+bool strong_bear_close = close < open and body_size > atr_val * 0.5
+
+bool bull_pattern = is_pin_down or is_pin_up or is_bull_engulf or strong_bull_close
+bool bear_pattern = is_pin_up or is_pin_down or is_bear_engulf or strong_bear_close
+
+
+// ══════════════════════════════════════════
+//  MODÜL 5: 1D BOS/CHoCH + ÇAPRAZ FİLTRE
+// ══════════════════════════════════════════
+
+var float d_sh1 = na
+var float d_sl1 = na
+var int   d_trend = 0
+var float d_last_break = na
+
+// 1D pivot'ları confluence için de sakla
+var float d_last_pvt_hi = na
+var float d_last_pvt_lo = na
+
+if not na(d_pvt_hi) and (na(d_sh1) or d_pvt_hi != d_sh1)
+    d_sh1 := d_pvt_hi
+    d_last_pvt_hi := d_pvt_hi
+if not na(d_pvt_lo) and (na(d_sl1) or d_pvt_lo != d_sl1)
+    d_sl1 := d_pvt_lo
+    d_last_pvt_lo := d_pvt_lo
+
+bool d_bos_bull   = false
+bool d_bos_bear   = false
+bool d_choch_bull = false
+bool d_choch_bear = false
+
+if not na(d_sh1) and close > d_sh1 and d_sh1 != d_last_break
+    d_last_break := d_sh1
+    if d_trend >= 0
+        d_bos_bull := true
+        d_trend    := 1
+    else
+        d_choch_bull := true
+        d_trend      := 1
+
+if not na(d_sl1) and close < d_sl1 and d_sl1 != d_last_break
+    d_last_break := d_sl1
+    if d_trend <= 0
+        d_bos_bear := true
+        d_trend    := -1
+    else
+        d_choch_bear := true
+        d_trend      := -1
+
+bool xf_no_long  = xfilter_on and d_trend == -1
+bool xf_no_short = xfilter_on and d_trend == 1
+
+
+// ══════════════════════════════════════════
+//  MODÜL 1: OI DIVERGENCE (bilgi)
+// ══════════════════════════════════════════
+
+h_pvt_hi = ta.pivothigh(high, sw_entry, sw_entry)
+h_pvt_lo = ta.pivotlow(low,   sw_entry, sw_entry)
+
+var float h_sh1 = na
+var float h_sh2 = na
+var float h_sl1 = na
+var float h_sl2 = na
+
+if not na(h_pvt_hi) and (na(h_sh1) or h_pvt_hi != h_sh1)
+    h_sh2 := h_sh1
+    h_sh1 := h_pvt_hi
+if not na(h_pvt_lo) and (na(h_sl1) or h_pvt_lo != h_sl1)
+    h_sl2 := h_sl1
+    h_sl1 := h_pvt_lo
+
+bool new_hh   = not na(h_pvt_hi) and not na(h_sh2) and h_sh1 > h_sh2
+bool new_ll   = not na(h_pvt_lo) and not na(h_sl2) and h_sl1 < h_sl2
+bool cd_oi_ok = bar_index - last_oi_bar >= cd_oi
+
+bool mod1_bear = mod1_on and new_hh and oi_state <= 0 and cd_oi_ok
+bool mod1_bull = mod1_on and new_ll and oi_state <= 0 and cd_oi_ok
+bool mod1_bear_strong = mod1_on and new_hh and oi_state <= -1 and cd_oi_ok
+
+if mod1_bear or mod1_bull
+    last_oi_bar := bar_index
+
+
+// ══════════════════════════════════════════
+//  MODÜL 2: BB SQUEEZE (bilgi + L/S bonus)
+// ══════════════════════════════════════════
+
+[bb_mid, bb_up, bb_dn] = ta.bb(close, bb_len, bb_mult)
+
+bb_width    = (bb_up - bb_dn) / bb_mid * 100.0
+bb_w_lo     = ta.lowest(bb_width, bb_len)
+bb_w_hi     = ta.highest(bb_width, bb_len)
+bb_w_range  = bb_w_hi - bb_w_lo
+bb_w_norm   = bb_w_range > 0 ? (bb_width - bb_w_lo) / bb_w_range * 100.0 : 50.0
+
+bool is_squeeze     = bb_w_norm <= sq_pctile
+bool squeeze_recent = is_squeeze or is_squeeze[1] or is_squeeze[2]
+
+vol_avg      = ta.sma(volume, bb_len)
+bool v_spike = volume >= vol_avg * vol_spike
+
+bool cd_sq_ok     = bar_index - last_squeeze_bar >= cd_squeeze
+bool sq_brk_bull  = mod2_on and squeeze_recent and v_spike and close > bb_up and cd_sq_ok
+bool sq_brk_bear  = mod2_on and squeeze_recent and v_spike and close < bb_dn and cd_sq_ok
+bool sq_real_bull = sq_brk_bull and oi_state >= 1
+bool sq_real_bear = sq_brk_bear and oi_state >= 1
+bool sq_fake_bull = sq_brk_bull and oi_state <= 0
+bool sq_fake_bear = sq_brk_bear and oi_state <= 0
+
+if sq_brk_bull or sq_brk_bear
+    last_squeeze_bar := bar_index
+
+
+// ══════════════════════════════════════════
+//  MODÜL 3: SWEEP DETECTION (L/S bonus)
+// ══════════════════════════════════════════
+
+sw_pvt_hi = ta.pivothigh(high, sw_sweep, sw_sweep)
+sw_pvt_lo = ta.pivotlow(low,   sw_sweep, sw_sweep)
+
+var float sw_last_hi     = na
+var float sw_last_lo     = na
+var bool sw_hi_triggered = false
+var bool sw_lo_triggered = false
+
+if not na(sw_pvt_hi)
+    sw_last_hi      := sw_pvt_hi
+    sw_hi_triggered := false
+if not na(sw_pvt_lo)
+    sw_last_lo      := sw_pvt_lo
+    sw_lo_triggered := false
+
+bool sweep_above = false
+bool sweep_below = false
+bool cd_sw_ok    = bar_index - last_sweep_bar >= cd_sweep
+
+if not sw_hi_triggered and not na(sw_last_hi) and high > sw_last_hi and close < sw_last_hi and cd_sw_ok
+    sweep_above     := true
+    sw_hi_triggered := true
+    last_sweep_bar  := bar_index
+    last_sweep_bear := bar_index
+
+if not sw_lo_triggered and not na(sw_last_lo) and low < sw_last_lo and close > sw_last_lo and cd_sw_ok
+    sweep_below     := true
+    sw_lo_triggered := true
+    last_sweep_bar  := bar_index
+    last_sweep_bull := bar_index
+
+bool recent_sweep_bull = bar_index - last_sweep_bull <= 24
+bool recent_sweep_bear = bar_index - last_sweep_bear <= 24
+
+
+// ══════════════════════════════════════════
+//  MODÜL 4: LİKİDİTE ZONE TESPİTİ (v2.0)
+// ══════════════════════════════════════════
+// Felsefe: Swing high/low = likidite havuzu
+// Trader'ların %90'ı stop-loss'unu son swing'in
+// üstüne/altına koyar → orada likidite birikir
+// Smart money bu seviyeleri hedefler
+//
+// 4H swing high → supply zone (short stop'lar üstte)
+// 4H swing low  → demand zone (long stop'lar altta)
+// Zone genişliği: pivot ± ATR × zone_width
+
+// Zone dizileri
+var box[]   dz_boxes  = array.new_box()
+var float[] dz_tops   = array.new_float()
+var float[] dz_bots   = array.new_float()
+var int[]   dz_state  = array.new_int()      // 0=bekliyor, 1=dokunuldu, 2=sinyal verildi
+var int[]   dz_strong = array.new_int()       // 0=normal, 1=1D confluence ★
+
+var box[]   sz_boxes  = array.new_box()
+var float[] sz_tops   = array.new_float()
+var float[] sz_bots   = array.new_float()
+var int[]   sz_state  = array.new_int()
+var int[]   sz_strong = array.new_int()
+
+int max_zones = 20
+float h4_atr_safe = nz(h4_atr, atr_val)
+
+// --- 1D Confluence kontrolü ---
+// Bir 4H pivot, 1D pivot'a yakınsa → güçlendirilmiş zone
+f_is_near_d1_hi(price) =>
+    d1_confluence and not na(d_last_pvt_hi) and math.abs(price - d_last_pvt_hi) <= h4_atr_safe * confluence_tol
+
+f_is_near_d1_lo(price) =>
+    d1_confluence and not na(d_last_pvt_lo) and math.abs(price - d_last_pvt_lo) <= h4_atr_safe * confluence_tol
+
+// --- Yeni 4H Swing High → Supply Zone ---
+// Swing high'ın olduğu yerde short stop'lar birikir
+// Zone: [high - zone_width×ATR, high + zone_width×ATR]
+if mod4_on and not na(h4_pvt_hi)
+    float pvt = h4_pvt_hi
+    float z_top = pvt + h4_atr_safe * zone_width
+    float z_bot = pvt - h4_atr_safe * zone_width
+
+    // Aynı seviyede zaten zone var mı kontrol et (çift çizimi önle)
+    bool duplicate = false
+    if array.size(sz_tops) > 0
+        for j = 0 to array.size(sz_tops) - 1
+            if math.abs(array.get(sz_tops, j) - z_top) < h4_atr_safe * 0.2
+                duplicate := true
+                break
+
+    if not duplicate and z_top > z_bot
+        // 1D confluence kontrol
+        bool is_strong = f_is_near_d1_hi(pvt)
+        color z_col = is_strong ? col_szone_strong : col_szone
+        color b_col = is_strong ? col_bear : color.new(col_bear, 50)
+
+        if array.size(sz_boxes) >= max_zones
+            box.delete(array.shift(sz_boxes))
+            array.shift(sz_tops)
+            array.shift(sz_bots)
+            array.shift(sz_state)
+            array.shift(sz_strong)
+
+        nb = box.new(bar_index - sw_4h * 16, z_top, bar_index + 100, z_bot,
+             border_color=b_col, bgcolor=z_col, border_width=is_strong ? 2 : 1)
+        array.push(sz_boxes, nb)
+        array.push(sz_tops, z_top)
+        array.push(sz_bots, z_bot)
+        array.push(sz_state, 0)
+        array.push(sz_strong, is_strong ? 1 : 0)
+
+// --- Yeni 4H Swing Low → Demand Zone ---
+// Swing low'un olduğu yerde long stop'lar birikir
+// Zone: [low - zone_width×ATR, low + zone_width×ATR]
+if mod4_on and not na(h4_pvt_lo)
+    float pvt = h4_pvt_lo
+    float z_top = pvt + h4_atr_safe * zone_width
+    float z_bot = pvt - h4_atr_safe * zone_width
+
+    bool duplicate = false
+    if array.size(dz_tops) > 0
+        for j = 0 to array.size(dz_tops) - 1
+            if math.abs(array.get(dz_tops, j) - z_top) < h4_atr_safe * 0.2
+                duplicate := true
+                break
+
+    if not duplicate and z_top > z_bot
+        bool is_strong = f_is_near_d1_lo(pvt)
+        color z_col = is_strong ? col_dzone_strong : col_dzone
+        color b_col = is_strong ? col_bull : color.new(col_bull, 50)
+
+        if array.size(dz_boxes) >= max_zones
+            box.delete(array.shift(dz_boxes))
+            array.shift(dz_tops)
+            array.shift(dz_bots)
+            array.shift(dz_state)
+            array.shift(dz_strong)
+
+        nb = box.new(bar_index - sw_4h * 16, z_top, bar_index + 100, z_bot,
+             border_color=b_col, bgcolor=z_col, border_width=is_strong ? 2 : 1)
+        array.push(dz_boxes, nb)
+        array.push(dz_tops, z_top)
+        array.push(dz_bots, z_bot)
+        array.push(dz_state, 0)
+        array.push(dz_strong, is_strong ? 1 : 0)
+
+
+// ══════════════════════════════════════════
+//  ZONE DOKUNMA + CANDLE PATTERN → L/S
+// ══════════════════════════════════════════
+
+bool sig_hazirlan_long  = false
+bool sig_hazirlan_short = false
+bool sig_long           = false
+bool sig_short          = false
+int  long_score         = 0
+int  short_score        = 0
+
+bool cd_long_ok  = bar_index - last_long_bar >= ls_cooldown
+bool cd_short_ok = bar_index - last_short_bar >= ls_cooldown
+
+// --- Demand Zone Kontrolü ---
+if mod4_on and array.size(dz_boxes) > 0
+    for i = array.size(dz_boxes) - 1 to 0
+        d_t   = array.get(dz_tops, i)
+        d_b   = array.get(dz_bots, i)
+        state = array.get(dz_state, i)
+        strong = array.get(dz_strong, i)
+
+        // Zone kırıldı mı? (sweep toleransı ile)
+        if close < d_b - h4_atr_safe * zone_sweep_tol
+            box.delete(array.get(dz_boxes, i))
+            array.remove(dz_boxes, i)
+            array.remove(dz_tops, i)
+            array.remove(dz_bots, i)
+            array.remove(dz_state, i)
+            array.remove(dz_strong, i)
+
+        // Fiyat zone'da mı? (sweep tolerans alanı dahil)
+        else if low <= d_t and close >= d_b - h4_atr_safe * zone_sweep_tol
+            // İlk dokunuş → HAZIRLAN
+            if state == 0
+                array.set(dz_state, i, 1)
+                sig_hazirlan_long := true
+
+            // Sinyal: candle pattern + cooldown (farklı zone = cooldown atla)
+            if state < 2 and bull_pattern and (cd_long_ok or i != last_long_zone_idx) and not xf_no_long and not oi_blocks_long
+                array.set(dz_state, i, 2)
+                sig_long    := true
+                long_score  := 1
+                last_long_zone_idx := i
+                // Bonuslar
+                if recent_sweep_bull
+                    long_score += 1
+                if sq_real_bull
+                    long_score += 1
+                if wt_supports_long
+                    long_score += 1
+                if oi_bullish_div
+                    long_score += 1
+                // v2.0: 1D confluence bonus
+                if strong == 1
+                    long_score += 1
+
+            box.set_right(array.get(dz_boxes, i), bar_index + 20)
+
+        else
+            box.set_right(array.get(dz_boxes, i), bar_index + 20)
+
+// --- Supply Zone Kontrolü ---
+if mod4_on and array.size(sz_boxes) > 0
+    for i = array.size(sz_boxes) - 1 to 0
+        s_t   = array.get(sz_tops, i)
+        s_b   = array.get(sz_bots, i)
+        state = array.get(sz_state, i)
+        strong = array.get(sz_strong, i)
+
+        // Zone kırıldı mı? (sweep toleransı ile)
+        if close > s_t + h4_atr_safe * zone_sweep_tol
+            box.delete(array.get(sz_boxes, i))
+            array.remove(sz_boxes, i)
+            array.remove(sz_tops, i)
+            array.remove(sz_bots, i)
+            array.remove(sz_state, i)
+            array.remove(sz_strong, i)
+
+        // Fiyat zone'da mı? (sweep tolerans alanı dahil)
+        else if high >= s_b and close <= s_t + h4_atr_safe * zone_sweep_tol
+            if state == 0
+                array.set(sz_state, i, 1)
+                sig_hazirlan_short := true
+
+            if state < 2 and bear_pattern and (cd_short_ok or i != last_short_zone_idx) and not xf_no_short and not oi_blocks_short
+                array.set(sz_state, i, 2)
+                sig_short    := true
+                short_score  := 1
+                last_short_zone_idx := i
+                if recent_sweep_bear
+                    short_score += 1
+                if sq_real_bear
+                    short_score += 1
+                if mod1_bear_strong
+                    short_score += 1
+                if wt_supports_short
+                    short_score += 1
+                if oi_bearish_div
+                    short_score += 1
+                // v2.0: 1D confluence bonus
+                if strong == 1
+                    short_score += 1
+
+            box.set_right(array.get(sz_boxes, i), bar_index + 20)
+
+        else
+            box.set_right(array.get(sz_boxes, i), bar_index + 20)
+
+// Cooldown güncelle
+if sig_long
+    last_long_bar := bar_index
+if sig_short
+    last_short_bar := bar_index
+
+// Güç metni (v2.0: max 6 bonus — sweep, squeeze, WT, OI div, OI strong, 1D confluence)
+f_str(s) => s >= 5 ? "⚡⚡⚡⚡⚡" : s >= 4 ? "⚡⚡⚡⚡" : s >= 3 ? "⚡⚡⚡" : s == 2 ? "⚡⚡" : "⚡"
+
+
+// ══════════════════════════════════════════
+//  GÖRSEL ÇIKTILAR
+// ══════════════════════════════════════════
+
+// ── L/S Sinyalleri ──
+if sig_long
+    label.new(bar_index, low - atr_val * 1.0,
+         "L " + f_str(long_score),
+         style=label.style_label_up,
+         color=col_long, textcolor=color.white, size=size.small)
+
+if sig_short
+    label.new(bar_index, high + atr_val * 1.0,
+         "S " + f_str(short_score),
+         style=label.style_label_down,
+         color=col_short, textcolor=color.white, size=size.small)
+
+// ── HAZIRLAN Sinyalleri ──
+if sig_hazirlan_long and not sig_long
+    label.new(bar_index, low - atr_val * 0.5,
+         "⚠️", style=label.style_label_up,
+         color=color.new(col_warn, 30), textcolor=color.black, size=size.tiny)
+
+if sig_hazirlan_short and not sig_short
+    label.new(bar_index, high + atr_val * 0.5,
+         "⚠️", style=label.style_label_down,
+         color=color.new(col_warn, 30), textcolor=color.black, size=size.tiny)
+
+// ── Detay Etiketleri (ls_only kapalıysa) ──
+bool show_det = not ls_only
+
+if show_det and mod1_bear_strong
+    label.new(math.max(0, bar_index - sw_entry), high + atr_val * 0.3,
+         "OI‼️", style=label.style_label_down,
+         color=col_bear, textcolor=color.white, size=size.tiny)
+else if show_det and mod1_bear
+    label.new(math.max(0, bar_index - sw_entry), high + atr_val * 0.3,
+         "OI⚠️", style=label.style_label_down,
+         color=col_warn, textcolor=color.black, size=size.tiny)
+if show_det and mod1_bull
+    label.new(math.max(0, bar_index - sw_entry), low - atr_val * 0.3,
+         "OI⚠️", style=label.style_label_up,
+         color=col_warn, textcolor=color.black, size=size.tiny)
+
+if show_det and sq_real_bull
+    label.new(bar_index, low - atr_val * 0.5,
+         "SQ✅", style=label.style_label_up,
+         color=col_bull, textcolor=color.white, size=size.tiny)
+if show_det and sq_fake_bull
+    label.new(bar_index, low - atr_val * 0.5,
+         "SQ⚠️", style=label.style_label_up,
+         color=col_warn, textcolor=color.black, size=size.tiny)
+if show_det and sq_real_bear
+    label.new(bar_index, high + atr_val * 0.5,
+         "SQ✅", style=label.style_label_down,
+         color=col_bear, textcolor=color.white, size=size.tiny)
+if show_det and sq_fake_bear
+    label.new(bar_index, high + atr_val * 0.5,
+         "SQ⚠️", style=label.style_label_down,
+         color=col_warn, textcolor=color.black, size=size.tiny)
+
+if show_det and sweep_above
+    label.new(bar_index, high + atr_val * 0.8,
+         "SW▼", style=label.style_label_down,
+         color=col_bear, textcolor=color.white, size=size.tiny)
+if show_det and sweep_below
+    label.new(bar_index, low - atr_val * 0.8,
+         "SW▲", style=label.style_label_up,
+         color=col_bull, textcolor=color.white, size=size.tiny)
+
+if show_det and mod5_on and d_bos_bull
+    label.new(bar_index, low - atr_val * 1.5,
+         "BOS▲", style=label.style_label_up,
+         color=col_bull, textcolor=color.white, size=size.tiny)
+if show_det and mod5_on and d_bos_bear
+    label.new(bar_index, high + atr_val * 1.5,
+         "BOS▼", style=label.style_label_down,
+         color=col_bear, textcolor=color.white, size=size.tiny)
+if show_det and mod5_on and d_choch_bull
+    label.new(bar_index, low - atr_val * 1.5,
+         "CHoCH▲", style=label.style_label_up,
+         color=color.new(#00BCD4, 0), textcolor=color.white, size=size.tiny)
+if show_det and mod5_on and d_choch_bear
+    label.new(bar_index, high + atr_val * 1.5,
+         "CHoCH▼", style=label.style_label_down,
+         color=color.new(#E040FB, 0), textcolor=color.white, size=size.tiny)
+
+
+// ── 1D Swing Çizgileri ──
+var line d_hi_line = na
+var line d_lo_line = na
+
+if mod5_on
+    int ls = math.max(0, bar_index - 100)
+    if not na(d_sh1)
+        line.delete(d_hi_line)
+        d_hi_line := line.new(ls, d_sh1, bar_index + 20, d_sh1,
+             color=color.new(col_bear, 50), style=line.style_dashed, width=1)
+    if not na(d_sl1)
+        line.delete(d_lo_line)
+        d_lo_line := line.new(ls, d_sl1, bar_index + 20, d_sl1,
+             color=color.new(col_bull, 50), style=line.style_dashed, width=1)
+
+
+// ── BB Bantları ──
+plot(mod2_on ? bb_up  : na, "BB Üst",  color=color.new(#2196F3, 70), linewidth=1)
+plot(mod2_on ? bb_dn  : na, "BB Alt",  color=color.new(#2196F3, 70), linewidth=1)
+plot(mod2_on ? bb_mid : na, "BB Orta", color=color.new(#2196F3, 85), linewidth=1, style=plot.style_cross)
+bgcolor(sess_bg_col, title="Session Arka Plan")
+
+
+// ── Dashboard ──
+var table dash = table.new(position.top_right, 2, 8,
+     bgcolor=color.new(#1E1E1E, 10), border_width=1, border_color=color.new(#424242, 0))
+
+if barstate.islast
+    table.cell(dash, 0, 0, "🛡️ SHIELD", text_color=color.white, text_size=size.small)
+    table.cell(dash, 1, 0, "v2.0",      text_color=col_warn,     text_size=size.small)
+
+    t_txt = d_trend == 1 ? "▲ BULL" : d_trend == -1 ? "▼ BEAR" : "—"
+    t_col = d_trend == 1 ? col_bull : d_trend == -1 ? col_bear : col_neutral
+    table.cell(dash, 0, 1, "1D",     text_color=color.white, text_size=size.small)
+    table.cell(dash, 1, 1, t_txt,    text_color=t_col,       text_size=size.small)
+
+    oi_txt = oi_bearish_div ? "⚠️ DIV▼" + str.tostring(oi_chg_pct, "#.#") + "%" :
+             oi_bullish_div ? "⚠️ DIV▲" + str.tostring(oi_chg_pct, "#.#") + "%" :
+             oi_state >= 2  ? "▲▲"  + str.tostring(oi_chg_pct, "#.#") + "%" :
+             oi_state >= 1  ? "▲"   + str.tostring(oi_chg_pct, "#.#") + "%" :
+             oi_state <= -2 ? "▼▼"  + str.tostring(oi_chg_pct, "#.#") + "%" :
+             oi_state <= -1 ? "▼"   + str.tostring(oi_chg_pct, "#.#") + "%" :
+                              "—"   + str.tostring(oi_chg_pct, "#.#") + "%"
+    oi_col = oi_bearish_div or oi_bullish_div ? col_warn : oi_state >= 2 ? col_bull : oi_state >= 1 ? col_warn : oi_state <= -1 ? col_bear : col_neutral
+    table.cell(dash, 0, 2, "OI",      text_color=color.white, text_size=size.small)
+    table.cell(dash, 1, 2, oi_txt,    text_color=oi_col,      text_size=size.small)
+
+    wt_col = wt_overbought ? col_bear : wt_oversold ? col_bull : col_neutral
+    wt_txt = wt_overbought ? "🔴 OB" : wt_oversold ? "🟢 OS" : "— " + str.tostring(wt1, "#")
+    table.cell(dash, 0, 3, "WT",      text_color=color.white, text_size=size.small)
+    table.cell(dash, 1, 3, wt_txt,    text_color=wt_col,      text_size=size.small)
+
+    sq_txt = is_squeeze ? "🔴 AKTİF" : "⚪"
+    table.cell(dash, 0, 4, "SQ",      text_color=color.white, text_size=size.small)
+    table.cell(dash, 1, 4, sq_txt,    text_color=col_warn,    text_size=size.small)
+
+    xf_txt = not xfilter_on ? "OFF" : d_trend == 1 ? "🚫S" : d_trend == -1 ? "🚫L" : "ON"
+    table.cell(dash, 0, 5, "XF",      text_color=color.white, text_size=size.small)
+    table.cell(dash, 1, 5, xf_txt,    text_color=col_warn,    text_size=size.small)
+
+    // v2.0: Zone sayısı + kaçı güçlendirilmiş
+    int dz_s_cnt = 0
+    int sz_s_cnt = 0
+    if array.size(dz_strong) > 0
+        for k = 0 to array.size(dz_strong) - 1
+            if array.get(dz_strong, k) == 1
+                dz_s_cnt += 1
+    if array.size(sz_strong) > 0
+        for k = 0 to array.size(sz_strong) - 1
+            if array.get(sz_strong, k) == 1
+                sz_s_cnt += 1
+
+    z_d = "D" + str.tostring(array.size(dz_boxes)) + (dz_s_cnt > 0 ? "★" + str.tostring(dz_s_cnt) : "")
+    z_s = " S" + str.tostring(array.size(sz_boxes)) + (sz_s_cnt > 0 ? "★" + str.tostring(sz_s_cnt) : "")
+    z_txt = z_d + z_s
+    table.cell(dash, 0, 6, "ZN",      text_color=color.white, text_size=size.small)
+    table.cell(dash, 1, 6, z_txt,     text_color=col_neutral, text_size=size.small)
+
+    sess_col = in_any_overlap ? col_warn : in_us ? color.new(#FF9800, 0) : in_europe ? color.new(#2196F3, 0) : in_asia ? color.new(#9C27B0, 0) : col_neutral
+    table.cell(dash, 0, 7, "🕐",      text_color=color.white, text_size=size.small)
+    table.cell(dash, 1, 7, sess_name, text_color=sess_col,    text_size=size.small)
+
+
+// ══════════════════════════════════════════
+//  ALERTLER
+// ══════════════════════════════════════════
+
+alertcondition(sig_long,           "🟢 LONG",     "LONG sinyali — zone + candle teyit!")
+alertcondition(sig_short,          "🔴 SHORT",    "SHORT sinyali — zone + candle teyit!")
+alertcondition(sig_hazirlan_long,  "⚠️ HAZIRLAN Long",  "Fiyat demand zone'a dokundu — candle pattern bekle!")
+alertcondition(sig_hazirlan_short, "⚠️ HAZIRLAN Short", "Fiyat supply zone'a dokundu — candle pattern bekle!")
+alertcondition(d_choch_bull or d_choch_bear, "🔄 CHoCH", "1D trend değişimi!")
+// ══════════════════════════════════════════

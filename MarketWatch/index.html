@@ -1,0 +1,1206 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<title>Global Market Watch</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Bebas+Neue&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#04080f;--surface:#080e1a;--surface2:#0c1422;
+  --border:#131f30;--border2:#1c2d42;
+  --green:#00e87a;--green-dim:#00a855;
+  --red:#ff2255;--red-dim:#cc1a44;
+  --amber:#ffaa00;--blue:#00c8ff;--blue-dim:#0077aa;
+  --teal:#00ddd0;--purple:#bb55ff;
+  --text:#7a9ab8;--text-bright:#c0d8f0;--text-dim:#2a4055;--white:#e8f4ff;
+  --fs-base:14px;--fs-sm:12px;--fs-xs:11px;--fs-xxs:10px;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{background:var(--bg);font-family:'Rajdhani',sans-serif;color:var(--text);min-width:440px;overflow-x:hidden;}
+body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,0.04) 3px,rgba(0,0,0,0.04) 4px);pointer-events:none;z-index:998;}
+
+/* ── Layout ── */
+.titlebar{background:var(--surface2);border-bottom:1px solid var(--border2);padding:8px 14px;display:flex;align-items:center;justify-content:space-between;}
+.dots{display:flex;gap:6px;}.dot{width:10px;height:10px;border-radius:50%;}
+.dot-r{background:#ff5f57;}.dot-y{background:#ffbd2e;}.dot-g{background:#28c841;}
+.tb-title{font-family:'Bebas Neue';font-size:14px;letter-spacing:3px;color:var(--blue);text-shadow:0 0 12px rgba(0,200,255,0.4);}
+.tb-badge{font-family:'Share Tech Mono';font-size:10px;color:var(--text-dim);}
+
+.clock-section{background:linear-gradient(135deg,var(--surface),var(--bg));border-bottom:1px solid var(--border);padding:10px 16px;display:flex;justify-content:space-between;align-items:center;position:relative;}
+.clock-section::after{content:'';position:absolute;bottom:0;left:16px;right:16px;height:1px;background:linear-gradient(90deg,transparent,var(--blue-dim),transparent);}
+.clock-time{font-family:'Share Tech Mono';font-size:32px;color:var(--white);letter-spacing:2px;line-height:1;}
+.clock-time .secs{font-size:20px;color:var(--blue);opacity:.8;}
+.clock-right{text-align:right;}
+.clock-date{font-family:'Share Tech Mono';font-size:12px;color:var(--text-bright);}
+.clock-tz{font-family:'Share Tech Mono';font-size:10px;color:var(--text-dim);letter-spacing:2px;margin-top:3px;}
+
+.tabs{display:flex;background:var(--surface2);border-bottom:2px solid var(--border2);}
+.tab{flex:1;padding:8px 2px 7px;text-align:center;font-family:'Share Tech Mono';font-size:8px;letter-spacing:.3px;color:var(--text-dim);cursor:pointer;border-right:1px solid var(--border);transition:all .15s;position:relative;}
+.tab:last-child{border-right:none;}
+.tab:hover{color:var(--text);}
+.tab.active{color:var(--blue);background:var(--bg);}
+.tab.active::after{content:'';position:absolute;bottom:-2px;left:0;right:0;height:2px;background:var(--blue);box-shadow:0 0 8px var(--blue);}
+.tab .alarm-dot{display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--red);margin-left:2px;animation:blink 1s ease-in-out infinite;vertical-align:middle;}
+
+.panel{display:none;height:calc(100vh - 148px);overflow-y:auto;overflow-x:hidden;}
+.panel.active{display:block;}
+.panel::-webkit-scrollbar{width:3px;}
+.panel::-webkit-scrollbar-track{background:var(--bg);}
+.panel::-webkit-scrollbar-thumb{background:var(--border2);}
+
+.sec-hdr{padding:6px 16px;background:var(--surface2);border-bottom:1px solid var(--border);font-family:'Share Tech Mono';font-size:10px;color:var(--text-dim);letter-spacing:3px;display:flex;justify-content:space-between;align-items:center;}
+.region-row{padding:5px 16px 4px;background:var(--bg);border-bottom:1px solid var(--border);font-family:'Share Tech Mono';font-size:9px;letter-spacing:3px;color:var(--text-dim);display:flex;align-items:center;gap:8px;}
+.region-row::after{content:'';flex:1;height:1px;background:var(--border);}
+
+/* ── Exchange rows ── */
+.ex-row{border-bottom:1px solid var(--border);position:relative;transition:background .1s;}
+.ex-row:hover{background:rgba(255,255,255,0.015);}
+.ex-row.is-open::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--green);box-shadow:0 0 8px var(--green);}
+.ex-row.is-lunch::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--amber);}
+.ex-main{padding:9px 16px 8px;display:grid;grid-template-columns:34px 1fr auto;gap:10px;align-items:center;}
+.ex-indicator{display:flex;flex-direction:column;align-items:center;gap:5px;}
+.status-dot{width:8px;height:8px;border-radius:50%;}
+.status-dot.open{background:var(--green);box-shadow:0 0 8px var(--green);animation:blink 2.5s ease-in-out infinite;}
+.status-dot.closed{background:var(--text-dim);}
+.status-dot.lunch{background:var(--amber);box-shadow:0 0 6px var(--amber);}
+.status-dot.pre{background:var(--teal);box-shadow:0 0 6px var(--teal);animation:blink 3s ease-in-out infinite;}
+@keyframes blink{0%,100%{opacity:1;}50%{opacity:.35;}}
+.ex-flag{font-size:15px;}
+.ex-name{font-family:'Rajdhani';font-weight:700;font-size:var(--fs-base);color:var(--text-bright);line-height:1.2;}
+.ex-index{font-family:'Share Tech Mono';font-size:var(--fs-xxs);color:var(--text-dim);letter-spacing:1.5px;margin-top:1px;}
+.ex-right{text-align:right;}
+.ex-status{font-family:'Share Tech Mono';font-size:11px;font-weight:700;letter-spacing:1.5px;}
+.ex-status.open{color:var(--green);}.ex-status.closed{color:var(--red-dim);}.ex-status.lunch{color:var(--amber);}.ex-status.pre{color:var(--teal);}
+.ex-hours{font-family:'Share Tech Mono';font-size:11px;color:var(--text);margin-top:2px;}
+.ex-countdown{font-family:'Share Tech Mono';font-size:10px;margin-top:2px;color:var(--text-dim);}
+.ex-countdown.soon{color:var(--amber);}.ex-countdown.opening{color:var(--green-dim);}
+.ex-chart{padding:0 16px 10px 58px;display:flex;flex-direction:column;gap:4px;}
+.chart-top{display:flex;justify-content:space-between;align-items:center;}
+.chart-change{font-family:'Share Tech Mono';font-size:11px;font-weight:700;}
+.chart-change.up{color:var(--green);}.chart-change.down{color:var(--red);}
+.chart-session-label{font-family:'Share Tech Mono';font-size:9px;color:var(--text-dim);}
+.sparkline-wrap{height:36px;}.sparkline-wrap svg{width:100%;height:100%;overflow:visible;}
+.session-bar-wrap{height:3px;background:rgba(255,255,255,0.04);border-radius:2px;overflow:hidden;}
+.session-bar-fill{height:100%;border-radius:2px;}
+.session-bar-fill.up{background:linear-gradient(90deg,var(--green-dim),var(--green));}
+.session-bar-fill.down{background:linear-gradient(90deg,var(--red-dim),var(--red));}
+
+/* ── Crypto ── */
+.crypto-coin{border-bottom:1px solid var(--border);padding:11px 16px 0;}
+.coin-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;}
+.coin-left{display:flex;align-items:center;gap:10px;}
+.coin-icon{font-size:22px;width:30px;text-align:center;}
+.coin-name{font-family:'Rajdhani';font-weight:700;font-size:17px;color:var(--text-bright);}
+.coin-sym{font-family:'Share Tech Mono';font-size:10px;color:var(--text-dim);letter-spacing:1px;}
+.coin-right{text-align:right;}
+.coin-price{font-family:'Share Tech Mono';font-size:16px;color:var(--white);}
+.coin-chg{font-family:'Share Tech Mono';font-size:12px;margin-top:2px;}
+.coin-chg.up{color:var(--green);}.coin-chg.down{color:var(--red);}
+.coin-chart-wrap{height:90px;margin:0 -16px;position:relative;}
+.coin-chart-wrap canvas{width:100%;height:90px;display:block;}
+.chart-overlay{position:absolute;bottom:4px;right:8px;font-family:'Share Tech Mono';font-size:9px;color:var(--text-dim);}
+
+/* ── Market ── */
+.market-grid{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border);}
+.market-card{background:var(--bg);padding:14px 16px;}
+.mcard-name{font-family:'Share Tech Mono';font-size:10px;color:var(--text-dim);letter-spacing:2px;margin-bottom:5px;}
+.mcard-price{font-family:'Share Tech Mono';font-size:18px;color:var(--white);}
+.mcard-chg{font-family:'Share Tech Mono';font-size:12px;margin-top:5px;}
+.mcard-chg.up{color:var(--green);}.mcard-chg.down{color:var(--red);}.mcard-chg.flat{color:var(--text-dim);}
+
+/* ── Sentiment ── */
+.sent-block{padding:11px 16px;border-bottom:1px solid var(--border);}
+.sent-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.03);}
+.sent-row:last-child{border-bottom:none;}
+.sent-label{font-family:'Share Tech Mono';font-size:10px;color:var(--text-dim);letter-spacing:2px;}
+.sent-val{font-family:'Share Tech Mono';font-size:14px;color:var(--white);}
+.fg-wrap{display:flex;flex-direction:column;align-items:center;padding:8px 0 4px;}
+.fg-cls{font-family:'Share Tech Mono';font-size:12px;letter-spacing:2px;text-align:center;margin-top:4px;}
+.cal-event{display:grid;grid-template-columns:58px 50px 1fr;gap:8px;padding:9px 16px;border-bottom:1px solid var(--border);align-items:center;}
+.cal-date{font-family:'Share Tech Mono';font-size:11px;color:var(--text);}
+.cal-badge{font-family:'Share Tech Mono';font-size:10px;padding:2px 5px;border-radius:2px;text-align:center;}
+.cal-badge.FOMC{background:rgba(255,34,85,.12);border:1px solid rgba(255,34,85,.25);color:var(--red);}
+.cal-badge.NFP{background:rgba(0,200,255,.1);border:1px solid rgba(0,200,255,.2);color:var(--blue);}
+.cal-badge.CPI{background:rgba(255,170,0,.1);border:1px solid rgba(255,170,0,.2);color:var(--amber);}
+.cal-desc{font-family:'Rajdhani';font-size:var(--fs-base);color:var(--text-bright);}
+.cal-days{font-family:'Share Tech Mono';font-size:9px;color:var(--text-dim);margin-top:1px;}
+
+/* ── Pulse / News ── */
+.baro-wrap{padding:13px 16px 11px;background:linear-gradient(135deg,var(--surface),var(--bg));border-bottom:1px solid var(--border2);}
+.baro-title{font-family:'Share Tech Mono';font-size:10px;color:var(--text-dim);letter-spacing:3px;margin-bottom:10px;display:flex;justify-content:space-between;}
+.baro-gauge-row{display:flex;align-items:center;gap:10px;}
+.baro-gauge{flex:1;height:11px;background:rgba(255,255,255,0.05);border-radius:5px;overflow:hidden;}
+.baro-fill{height:100%;border-radius:5px;transition:width 1s ease;}
+.baro-val{font-family:'Share Tech Mono';font-size:18px;font-weight:700;min-width:40px;text-align:right;}
+.baro-label{font-family:'Share Tech Mono';font-size:10px;margin-top:5px;text-align:center;letter-spacing:2px;}
+.baro-zones{display:flex;margin-top:6px;gap:1px;}
+.baro-zone{flex:1;height:3px;border-radius:1px;}
+.baro-breakdown{display:flex;gap:1px;margin-top:8px;}
+.baro-sub{flex:1;background:rgba(255,255,255,0.03);padding:6px;border-radius:2px;text-align:center;border:1px solid var(--border);}
+.baro-sub-label{font-family:'Share Tech Mono';font-size:8px;color:var(--text-dim);letter-spacing:1px;margin-bottom:3px;}
+.baro-sub-val{font-family:'Share Tech Mono';font-size:13px;font-weight:700;}
+.news-ctrl{background:var(--surface2);border-bottom:1px solid var(--border2);}
+.news-tabs{display:flex;border-bottom:1px solid var(--border);}
+.news-tab{flex:1;padding:6px;text-align:center;font-family:'Share Tech Mono';font-size:9px;letter-spacing:1.5px;color:var(--text-dim);cursor:pointer;border-right:1px solid var(--border);}
+.news-tab:last-child{border-right:none;}.news-tab.active{color:var(--blue);background:var(--bg);}
+.news-filters{padding:6px 12px;display:flex;gap:4px;flex-wrap:wrap;}
+.nf-btn{font-family:'Share Tech Mono';font-size:8.5px;padding:3px 8px;border-radius:2px;cursor:pointer;letter-spacing:1px;border:1px solid var(--border2);color:var(--text-dim);background:transparent;}
+.nf-btn.active{color:var(--white);}
+.nf-btn.all.active{background:rgba(0,200,255,.1);border-color:rgba(0,200,255,.3);color:var(--blue);}
+.nf-btn.HIGH.active{background:rgba(255,34,85,.1);border-color:rgba(255,34,85,.3);color:var(--red);}
+.nf-btn.MED.active{background:rgba(255,170,0,.1);border-color:rgba(255,170,0,.3);color:var(--amber);}
+.nf-btn.bullish.active{background:rgba(0,232,122,.1);border-color:rgba(0,232,122,.3);color:var(--green);}
+.nf-btn.bearish.active{background:rgba(255,34,85,.08);border-color:rgba(255,34,85,.2);color:var(--red);}
+.news-search-wrap{padding:5px 12px 8px;display:flex;gap:6px;align-items:center;}
+.news-search{flex:1;background:var(--bg);border:1px solid var(--border2);color:var(--text-bright);font-family:'Share Tech Mono';font-size:11px;padding:5px 9px;outline:none;border-radius:2px;}
+.news-search:focus{border-color:var(--blue-dim);}
+.news-search::placeholder{color:var(--text-dim);}
+.news-search-clear{background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:16px;}
+.news-item{padding:10px 16px 9px;border-bottom:1px solid var(--border);position:relative;cursor:pointer;transition:background .1s;}
+.news-item:hover{background:rgba(0,200,255,0.03);}
+.news-item:hover .news-title{color:var(--white);}
+.news-item:hover::after{content:'↗';position:absolute;right:12px;top:10px;font-size:13px;color:var(--blue-dim);}
+.news-item.HIGH::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--red);box-shadow:0 0 6px var(--red);}
+.news-item.MED::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--amber);}
+.news-item.LOW::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--text-dim);}
+.news-header{display:flex;align-items:center;gap:6px;margin-bottom:5px;}
+.impact-badge{font-family:'Share Tech Mono';font-size:9px;padding:2px 6px;border-radius:2px;letter-spacing:1px;font-weight:700;}
+.impact-badge.HIGH{background:rgba(255,34,85,.15);border:1px solid rgba(255,34,85,.3);color:var(--red);}
+.impact-badge.MED{background:rgba(255,170,0,.12);border:1px solid rgba(255,170,0,.25);color:var(--amber);}
+.impact-badge.LOW{background:rgba(42,64,85,.4);border:1px solid var(--border2);color:var(--text-dim);}
+.dir-badge{font-family:'Share Tech Mono';font-size:9px;padding:2px 6px;border-radius:2px;}
+.dir-badge.bullish{background:rgba(0,232,122,.1);border:1px solid rgba(0,232,122,.2);color:var(--green);}
+.dir-badge.bearish{background:rgba(255,34,85,.1);border:1px solid rgba(255,34,85,.2);color:var(--red);}
+.dir-badge.neutral{background:rgba(255,255,255,.04);border:1px solid var(--border);color:var(--text-dim);}
+.news-src{font-family:'Share Tech Mono';font-size:9px;color:var(--text-dim);margin-left:auto;padding-right:20px;}
+.news-title{font-family:'Rajdhani';font-size:var(--fs-base);color:var(--text-bright);line-height:1.4;font-weight:600;}
+.news-footer{display:flex;align-items:center;gap:8px;margin-top:5px;}
+.news-time{font-family:'Share Tech Mono';font-size:9px;color:var(--text-dim);}
+.news-tag{font-family:'Share Tech Mono';font-size:8px;padding:1px 5px;background:rgba(0,200,255,.07);border:1px solid rgba(0,200,255,.1);color:var(--blue-dim);border-radius:2px;}
+.score-bar{height:2px;background:rgba(255,255,255,0.05);border-radius:1px;margin-top:6px;overflow:hidden;}
+.score-fill{height:100%;border-radius:1px;}
+.score-fill.HIGH{background:linear-gradient(90deg,var(--red-dim),var(--red));}
+.score-fill.MED{background:linear-gradient(90deg,#cc7700,var(--amber));}
+.score-fill.LOW{background:var(--text-dim);}
+.news-count{font-family:'Share Tech Mono';font-size:9px;color:var(--text-dim);padding:4px 16px;background:var(--surface2);border-bottom:1px solid var(--border);}
+
+/* ══ PORTFOLIO ════════════════════════════════════════════════ */
+.port-summary{padding:13px 16px;background:linear-gradient(135deg,var(--surface),var(--bg));border-bottom:1px solid var(--border2);position:relative;}
+.port-summary::after{content:'';position:absolute;bottom:0;left:16px;right:16px;height:1px;background:linear-gradient(90deg,transparent,var(--blue-dim),transparent);}
+.port-total-label{font-family:'Share Tech Mono';font-size:10px;color:var(--text-dim);letter-spacing:3px;margin-bottom:5px;}
+.port-total-val{font-family:'Share Tech Mono';font-size:28px;color:var(--white);letter-spacing:1px;}
+.port-total-pnl{font-family:'Share Tech Mono';font-size:13px;margin-top:5px;}
+.port-total-pnl.up{color:var(--green);}.port-total-pnl.down{color:var(--red);}.port-total-pnl.flat{color:var(--text-dim);}
+.port-update{font-family:'Share Tech Mono';font-size:9px;color:var(--text-dim);margin-top:4px;}
+
+/* Add form */
+.port-form{padding:12px 16px 14px;background:var(--surface);border-bottom:2px solid var(--border2);}
+.port-form-title{font-family:'Share Tech Mono';font-size:10px;color:var(--blue);letter-spacing:3px;margin-bottom:10px;}
+.sym-search-wrap{position:relative;margin-bottom:8px;}
+.sym-input{width:100%;background:var(--bg);border:1px solid var(--border2);color:var(--text-bright);font-family:'Share Tech Mono';font-size:12px;padding:6px 10px;outline:none;border-radius:2px;}
+.sym-input:focus{border-color:var(--blue-dim);}
+.sym-input::placeholder{color:var(--text-dim);}
+.sym-dropdown{position:absolute;top:100%;left:0;right:0;background:var(--surface2);border:1px solid var(--border2);border-top:none;z-index:100;max-height:160px;overflow-y:auto;display:none;}
+.sym-dropdown.open{display:block;}
+.sym-option{padding:6px 10px;font-family:'Share Tech Mono';font-size:11px;color:var(--text-bright);cursor:pointer;border-bottom:1px solid var(--border);}
+.sym-option:hover{background:rgba(0,200,255,0.06);}
+.pf-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px;}
+.pf-row{display:flex;flex-direction:column;gap:3px;}
+.pf-label{font-family:'Share Tech Mono';font-size:9px;color:var(--text-dim);letter-spacing:1px;}
+.pf-select,.pf-input{background:var(--bg);border:1px solid var(--border2);color:var(--text-bright);font-family:'Share Tech Mono';font-size:11px;padding:5px 8px;border-radius:2px;outline:none;width:100%;}
+.pf-select:focus,.pf-input:focus{border-color:var(--blue-dim);}
+.pf-select option{background:var(--bg);}
+.pf-select-full{grid-column:1/-1;}
+
+/* Checklist */
+.checklist-wrap{background:rgba(255,170,0,0.04);border:1px solid rgba(255,170,0,0.15);border-radius:3px;padding:10px 12px;margin:8px 0;}
+.checklist-title{font-family:'Share Tech Mono';font-size:9px;color:var(--amber);letter-spacing:2px;margin-bottom:8px;display:flex;justify-content:space-between;}
+.checklist-title span{color:var(--text-dim);}
+.cl-item{display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.03);cursor:pointer;user-select:none;}
+.cl-item:last-child{border-bottom:none;}
+.cl-checkbox{width:16px;height:16px;border:2px solid var(--border2);border-radius:3px;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .1s;}
+.cl-checkbox.checked{background:var(--green);border-color:var(--green);}
+.cl-checkbox.checked::after{content:'✓';font-size:10px;color:#000;font-weight:700;}
+.cl-text{font-family:'Rajdhani';font-size:13px;color:var(--text-bright);}
+.cl-item.critical .cl-text{color:var(--amber);}
+
+.pf-btn{background:rgba(0,200,255,0.1);border:1px solid rgba(0,200,255,0.25);color:var(--blue);font-family:'Share Tech Mono';font-size:10px;padding:7px 12px;cursor:pointer;letter-spacing:2px;border-radius:2px;width:100%;margin-top:6px;transition:all .15s;}
+.pf-btn:hover:not(:disabled){background:rgba(0,200,255,0.2);}
+.pf-btn:disabled{opacity:.35;cursor:not-allowed;}
+.pf-btn.countdown{background:rgba(255,170,0,0.12);border-color:rgba(255,170,0,0.3);color:var(--amber);}
+
+.port-list-hdr{padding:6px 16px;background:var(--surface2);border-bottom:1px solid var(--border);font-family:'Share Tech Mono';font-size:10px;color:var(--text-dim);letter-spacing:3px;display:flex;justify-content:space-between;}
+.port-empty{padding:24px 16px;text-align:center;font-family:'Share Tech Mono';font-size:10px;color:var(--text-dim);letter-spacing:2px;}
+
+/* Position card */
+.pos-card{border-bottom:1px solid var(--border);position:relative;}
+.pos-card.profit .pos-dir-bar{background:var(--green);box-shadow:0 0 8px var(--green);}
+.pos-card.loss   .pos-dir-bar{background:var(--red);box-shadow:0 0 6px var(--red);}
+.pos-dir-bar{position:absolute;left:0;top:0;bottom:0;width:3px;}
+.pos-top{padding:10px 16px 0 20px;display:flex;justify-content:space-between;align-items:flex-start;}
+.pos-sym{font-family:'Bebas Neue';font-size:20px;color:var(--white);letter-spacing:1px;line-height:1;}
+.pos-meta{display:flex;gap:4px;margin-top:4px;flex-wrap:wrap;}
+.pos-badge{font-family:'Share Tech Mono';font-size:9px;padding:2px 6px;border-radius:2px;letter-spacing:.5px;}
+.pos-badge.long{background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.25);color:var(--green);}
+.pos-badge.short{background:rgba(255,34,85,.12);border:1px solid rgba(255,34,85,.25);color:var(--red);}
+.pos-badge.exch{background:rgba(0,200,255,.08);border:1px solid rgba(0,200,255,.15);color:var(--blue-dim);}
+.pos-badge.lev{background:rgba(255,170,0,.08);border:1px solid rgba(255,170,0,.15);color:var(--amber);}
+.pos-right{text-align:right;}
+.pos-pnl-usd{font-family:'Share Tech Mono';font-size:17px;font-weight:700;}
+.pos-pnl-usd.up{color:var(--green);}.pos-pnl-usd.down{color:var(--red);}
+.pos-pnl-pct{font-family:'Share Tech Mono';font-size:11px;margin-top:3px;}
+.pos-pnl-pct.up{color:var(--green-dim);}.pos-pnl-pct.down{color:var(--red-dim);}
+.pos-stats{padding:7px 16px 0 20px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;}
+.pos-stat{background:rgba(255,255,255,0.02);padding:5px 7px;border-radius:2px;border:1px solid var(--border);}
+.pos-stat-label{font-family:'Share Tech Mono';font-size:8px;color:var(--text-dim);letter-spacing:1px;margin-bottom:3px;}
+.pos-stat-val{font-family:'Share Tech Mono';font-size:11px;color:var(--text-bright);}
+.pos-stat-val.liq{color:var(--red-dim);}
+.pos-reason{padding:5px 16px 0 20px;font-family:'Rajdhani';font-size:12px;color:var(--text-dim);font-style:italic;}
+.pos-date{padding:2px 16px 0 20px;font-family:'Share Tech Mono';font-size:9px;color:var(--text-dim);}
+.pnl-bar-wrap{height:3px;margin:7px 16px 0 20px;background:rgba(255,255,255,0.04);border-radius:2px;overflow:hidden;}
+.pnl-bar-fill{height:100%;border-radius:2px;}
+.pnl-bar-fill.up{background:linear-gradient(90deg,var(--green-dim),var(--green));}
+.pnl-bar-fill.down{background:linear-gradient(90deg,var(--red-dim),var(--red));}
+.pos-actions{padding:8px 16px 10px 20px;display:flex;gap:6px;}
+.pos-act-btn{font-family:'Share Tech Mono';font-size:9px;padding:4px 10px;border-radius:2px;cursor:pointer;letter-spacing:.5px;border:1px solid;transition:all .1s;}
+.pos-act-btn.close-btn{background:rgba(0,232,122,.08);border-color:rgba(0,232,122,.2);color:var(--green);}
+.pos-act-btn.edit-btn{background:rgba(0,200,255,.06);border-color:rgba(0,200,255,.15);color:var(--blue-dim);}
+.pos-act-btn.del-btn{background:rgba(255,34,85,.06);border-color:rgba(255,34,85,.12);color:var(--red-dim);}
+
+/* ══ JOURNAL ════════════════════════════════════════════════ */
+.period-tabs{display:flex;background:var(--surface2);border-bottom:1px solid var(--border);}
+.period-tab{flex:1;padding:7px;text-align:center;font-family:'Share Tech Mono';font-size:9px;letter-spacing:1px;color:var(--text-dim);cursor:pointer;border-right:1px solid var(--border);}
+.period-tab:last-child{border-right:none;}.period-tab.active{color:var(--blue);background:var(--bg);}
+
+.journal-stats{padding:10px 16px;background:var(--surface);border-bottom:1px solid var(--border2);display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:5px;}
+.jstat{background:rgba(255,255,255,0.02);padding:7px 8px;border-radius:2px;border:1px solid var(--border);text-align:center;}
+.jstat-label{font-family:'Share Tech Mono';font-size:8px;color:var(--text-dim);letter-spacing:1px;margin-bottom:4px;}
+.jstat-val{font-family:'Share Tech Mono';font-size:14px;font-weight:700;}
+.jstat-val.up{color:var(--green);}.jstat-val.down{color:var(--red);}.jstat-val.neutral{color:var(--white);}
+
+/* Mistake chart */
+.mistake-section{padding:10px 16px;border-bottom:1px solid var(--border2);}
+.mistake-title{font-family:'Share Tech Mono';font-size:9px;color:var(--text-dim);letter-spacing:2px;margin-bottom:8px;}
+.mistake-bar-row{display:flex;align-items:center;gap:8px;margin-bottom:5px;}
+.mistake-label{font-family:'Rajdhani';font-size:12px;color:var(--text-bright);width:160px;flex-shrink:0;}
+.mistake-bar{flex:1;height:8px;background:rgba(255,255,255,0.05);border-radius:4px;overflow:hidden;}
+.mistake-fill{height:100%;border-radius:4px;background:linear-gradient(90deg,var(--red-dim),var(--red));}
+.mistake-count{font-family:'Share Tech Mono';font-size:9px;color:var(--red-dim);min-width:20px;text-align:right;}
+
+.journal-item{padding:10px 16px;border-bottom:1px solid var(--border);position:relative;}
+.journal-item.win::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--green);}
+.journal-item.loss::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--red);}
+.journal-item.liq::before{background:var(--purple)!important;box-shadow:0 0 6px var(--purple);}
+.ji-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;}
+.ji-sym{font-family:'Bebas Neue';font-size:18px;color:var(--white);letter-spacing:1px;}
+.ji-badges{display:flex;gap:4px;flex-wrap:wrap;}
+.ji-pnl{font-family:'Share Tech Mono';font-size:15px;font-weight:700;}
+.ji-pnl.up{color:var(--green);}.ji-pnl.down{color:var(--red);}
+.ji-dates{font-family:'Share Tech Mono';font-size:9px;color:var(--text-dim);margin-bottom:5px;}
+.ji-reasons{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:5px;}
+.ji-reason{background:rgba(255,255,255,0.02);padding:5px 7px;border-radius:2px;border:1px solid var(--border);}
+.ji-reason-label{font-family:'Share Tech Mono';font-size:8px;color:var(--text-dim);margin-bottom:2px;}
+.ji-reason-val{font-family:'Rajdhani';font-size:12px;color:var(--text-bright);}
+.ji-mistakes{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:4px;}
+.ji-mistake-tag{font-family:'Share Tech Mono';font-size:8px;padding:1px 6px;background:rgba(255,34,85,.1);border:1px solid rgba(255,34,85,.2);color:var(--red-dim);border-radius:2px;}
+.ji-notes{font-family:'Rajdhani';font-size:12px;color:var(--text-dim);font-style:italic;}
+.ji-liq-badge{font-family:'Share Tech Mono';font-size:8px;padding:1px 6px;background:rgba(187,85,255,.12);border:1px solid rgba(187,85,255,.25);color:var(--purple);border-radius:2px;}
+.ji-del{position:absolute;top:10px;right:16px;background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:15px;}
+.ji-del:hover{color:var(--red);}
+
+/* ══ MODAL ════════════════════════════════════════════════════ */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:500;display:none;align-items:center;justify-content:center;}
+.modal-overlay.open{display:flex;}
+.modal{background:var(--surface2);border:1px solid var(--border2);border-radius:4px;padding:18px;width:360px;box-shadow:0 0 50px rgba(0,0,0,0.9);max-height:90vh;overflow-y:auto;}
+.modal-title{font-family:'Bebas Neue';font-size:17px;letter-spacing:2px;color:var(--blue);margin-bottom:14px;}
+.modal-row{display:flex;flex-direction:column;gap:3px;margin-bottom:9px;}
+.modal-label{font-family:'Share Tech Mono';font-size:9px;color:var(--text-dim);letter-spacing:1px;}
+.modal-input,.modal-select,.modal-textarea{background:var(--bg);border:1px solid var(--border2);color:var(--text-bright);font-family:'Share Tech Mono';font-size:11px;padding:6px 9px;border-radius:2px;outline:none;width:100%;}
+.modal-input:focus,.modal-select:focus,.modal-textarea:focus{border-color:var(--blue-dim);}
+.modal-select option{background:var(--bg);}
+.modal-textarea{resize:vertical;min-height:56px;font-family:'Rajdhani';font-size:13px;}
+.modal-actions{display:flex;gap:7px;margin-top:14px;}
+.modal-btn{flex:1;font-family:'Share Tech Mono';font-size:10px;padding:7px;border-radius:2px;cursor:pointer;letter-spacing:1px;border:1px solid;transition:all .1s;}
+.modal-btn.confirm{background:rgba(0,232,122,.1);border-color:rgba(0,232,122,.25);color:var(--green);}
+.modal-btn.cancel{background:rgba(255,255,255,.03);border-color:var(--border2);color:var(--text-dim);}
+.modal-pnl-preview{font-family:'Share Tech Mono';font-size:14px;font-weight:700;text-align:center;padding:9px;background:rgba(255,255,255,.03);border-radius:2px;margin:9px 0;}
+
+/* Mistakes checkboxes in close modal */
+.mistakes-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:6px;}
+.mcheck{display:flex;align-items:center;gap:6px;cursor:pointer;padding:4px 6px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:2px;}
+.mcheck input{display:none;}
+.mcheck-box{width:14px;height:14px;border:2px solid var(--border2);border-radius:2px;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
+.mcheck input:checked + .mcheck-box{background:var(--red-dim);border-color:var(--red-dim);}
+.mcheck input:checked + .mcheck-box::after{content:'✓';font-size:9px;color:#fff;}
+.mcheck-label{font-family:'Rajdhani';font-size:12px;color:var(--text-bright);}
+
+/* Countdown overlay */
+.countdown-overlay{position:absolute;inset:0;background:rgba(0,0,0,0.85);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;border-radius:2px;}
+.countdown-num{font-family:'Bebas Neue';font-size:64px;color:var(--amber);line-height:1;}
+.countdown-msg{font-family:'Share Tech Mono';font-size:10px;color:var(--amber);letter-spacing:2px;margin-top:4px;text-align:center;}
+.countdown-cancel{margin-top:12px;font-family:'Share Tech Mono';font-size:9px;color:var(--text-dim);cursor:pointer;text-decoration:underline;}
+
+/* FOMO warning */
+.fomo-warn{background:rgba(255,34,85,0.08);border:1px solid rgba(255,34,85,0.25);padding:8px 12px;border-radius:2px;margin-bottom:6px;font-family:'Share Tech Mono';font-size:10px;color:var(--red);letter-spacing:.5px;display:none;}
+.fomo-warn.show{display:block;}
+
+/* ALARM */
+.alarm-form{padding:13px 16px;background:var(--surface);border-bottom:2px solid var(--border2);}
+.alarm-form-title{font-family:'Share Tech Mono';font-size:10px;color:var(--blue);letter-spacing:3px;margin-bottom:11px;}
+.af-row{display:flex;gap:7px;margin-bottom:7px;align-items:center;}
+.af-label{font-family:'Share Tech Mono';font-size:9px;color:var(--text-dim);letter-spacing:1px;width:65px;flex-shrink:0;}
+.af-select,.af-input{background:var(--bg);border:1px solid var(--border2);color:var(--text-bright);font-family:'Share Tech Mono';font-size:11px;padding:5px 8px;border-radius:2px;flex:1;outline:none;}
+.af-select option{background:var(--bg);}
+.af-btn{background:rgba(0,200,255,0.1);border:1px solid rgba(0,200,255,0.25);color:var(--blue);font-family:'Share Tech Mono';font-size:10px;padding:6px 12px;cursor:pointer;letter-spacing:2px;border-radius:2px;width:100%;margin-top:5px;}
+.alarm-list-hdr{padding:6px 16px;background:var(--surface2);border-bottom:1px solid var(--border);font-family:'Share Tech Mono';font-size:10px;color:var(--text-dim);letter-spacing:3px;display:flex;justify-content:space-between;}
+.alarm-empty{padding:22px 16px;text-align:center;font-family:'Share Tech Mono';font-size:10px;color:var(--text-dim);letter-spacing:2px;}
+.alarm-item{padding:10px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;position:relative;}
+.alarm-item.triggered{background:rgba(255,34,85,0.04);}
+.alarm-item.triggered::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--red);box-shadow:0 0 6px var(--red);}
+.alarm-item.inactive{opacity:.45;}
+.alarm-toggle{width:30px;height:18px;background:var(--border2);border-radius:9px;position:relative;cursor:pointer;flex-shrink:0;transition:background .2s;}
+.alarm-toggle.on{background:var(--green-dim);}
+.alarm-toggle::after{content:'';position:absolute;width:14px;height:14px;background:white;border-radius:50%;top:2px;left:2px;transition:left .2s;}
+.alarm-toggle.on::after{left:14px;}
+.alarm-info{flex:1;}
+.alarm-asset{font-family:'Rajdhani';font-weight:700;font-size:var(--fs-base);color:var(--text-bright);}
+.alarm-cond{font-family:'Share Tech Mono';font-size:11px;margin-top:1px;}
+.alarm-cond.above{color:var(--green);}.alarm-cond.below{color:var(--red);}
+.alarm-status{font-family:'Share Tech Mono';font-size:10px;text-align:right;}
+.alarm-fired{color:var(--red);animation:blink 1s ease-in-out infinite;font-weight:700;}
+.alarm-waiting{color:var(--text-dim);}
+.alarm-del{background:rgba(255,34,85,0.08);border:1px solid rgba(255,34,85,0.15);color:var(--red-dim);font-family:'Share Tech Mono';font-size:10px;padding:4px 9px;cursor:pointer;border-radius:2px;flex-shrink:0;}
+
+/* TOAST */
+#toast-container{position:fixed;top:12px;right:12px;z-index:999;display:flex;flex-direction:column;gap:8px;pointer-events:none;}
+.toast{background:var(--surface2);border:1px solid var(--red);border-left:3px solid var(--red);padding:11px 16px;border-radius:3px;box-shadow:0 0 24px rgba(255,34,85,0.3);animation:toastIn .3s ease;pointer-events:all;max-width:360px;}
+.toast.green{border-color:var(--green);border-left-color:var(--green);box-shadow:0 0 24px rgba(0,232,122,0.2);}
+.toast-title{font-family:'Share Tech Mono';font-size:11px;letter-spacing:1px;margin-bottom:3px;}
+.toast.green .toast-title{color:var(--green);}
+.toast:not(.green) .toast-title{color:var(--red);}
+.toast-body{font-family:'Rajdhani';font-size:var(--fs-base);color:var(--text-bright);}
+.toast-close{float:right;cursor:pointer;color:var(--text-dim);font-size:15px;margin-left:8px;}
+@keyframes toastIn{from{opacity:0;transform:translateX(20px);}to{opacity:1;transform:translateX(0);}}
+
+.loading{text-align:center;padding:26px 16px;font-family:'Share Tech Mono';font-size:11px;color:var(--text-dim);letter-spacing:3px;animation:pulse 1.5s ease-in-out infinite;}
+@keyframes pulse{0%,100%{opacity:.4;}50%{opacity:1;}}
+.err{text-align:center;padding:13px;font-family:'Share Tech Mono';font-size:10px;color:var(--red-dim);}
+.footer{padding:7px 16px;background:var(--surface2);border-top:1px solid var(--border2);display:flex;justify-content:space-between;align-items:center;}
+.footer-left{font-family:'Share Tech Mono';font-size:10px;color:var(--text-dim);}
+.open-badge{font-family:'Share Tech Mono';font-size:10px;background:rgba(0,232,122,.08);border:1px solid rgba(0,232,122,.2);padding:3px 9px;color:var(--green);}
+.open-badge.none{background:rgba(255,34,85,.06);border-color:rgba(255,34,85,.15);color:var(--red-dim);}
+</style>
+</head>
+<body>
+
+<!-- ══ CLOSE MODAL ══════════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-close">
+  <div class="modal">
+    <div class="modal-title">POZİSYONU KAPAT</div>
+    <div class="modal-row">
+      <div class="modal-label">ÇIKIŞ FİYATI ($)</div>
+      <input class="modal-input" id="mc-exit-price" type="number" step="any" placeholder="Güncel fiyat" oninput="updatePnlPreview()">
+    </div>
+    <div id="mc-pnl-preview" class="modal-pnl-preview" style="display:none"></div>
+    <div class="modal-row">
+      <div class="modal-label">ÇIKIŞ TARİHİ</div>
+      <input class="modal-input" id="mc-exit-date" type="datetime-local">
+    </div>
+    <div class="modal-row">
+      <div class="modal-label">ÇIKIŞ SEBEBİ</div>
+      <select class="modal-select" id="mc-exit-reason">
+        <option value="">Seç...</option>
+        <option>TP Hedefi</option>
+        <option>Kısmi TP</option>
+        <option>Stop Loss</option>
+        <option>Setup Bozuldu</option>
+        <option>Trailing Stop</option>
+        <option>Manuel Kapatma</option>
+        <option>Likidasyon</option>
+        <option>Diğer</option>
+      </select>
+    </div>
+    <div class="modal-row" id="mc-liq-row" style="display:none">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+        <input type="checkbox" id="mc-is-liq" style="width:16px;height:16px;accent-color:var(--purple)">
+        <span style="font-family:'Share Tech Mono';font-size:10px;color:var(--purple)">⚡ LİKİDASYON</span>
+      </label>
+    </div>
+    <div class="modal-row">
+      <div class="modal-label">YAPILAN HATALAR</div>
+      <div class="mistakes-grid" id="mistakes-grid"></div>
+    </div>
+    <div class="modal-row">
+      <div class="modal-label">NOT</div>
+      <textarea class="modal-textarea" id="mc-exit-notes" placeholder="Ne öğrendim? Bir dahaki sefere..."></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="modal-btn cancel" onclick="closeModal('modal-close')">İPTAL</button>
+      <button class="modal-btn confirm" onclick="confirmClose()">✅ KAPAT & KAYDET</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ EDIT MODAL ════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-edit">
+  <div class="modal">
+    <div class="modal-title">POZİSYON DÜZENLE</div>
+    <div class="modal-row"><div class="modal-label">GİRİŞ FİYATI ($)</div><input class="modal-input" id="me-entry" type="number" step="any"></div>
+    <div class="modal-row"><div class="modal-label">MARGIN (USDT)</div><input class="modal-input" id="me-margin" type="number" step="any"></div>
+    <div class="modal-row"><div class="modal-label">KALDIRAC</div><input class="modal-input" id="me-lev" type="number" step="1" min="1"></div>
+    <div class="modal-row"><div class="modal-label">GİRİŞ SEBEBİ</div><input class="modal-input" id="me-reason" placeholder="OB retesti, FVG..."></div>
+    <div class="modal-row"><div class="modal-label">NOT</div><textarea class="modal-textarea" id="me-notes" placeholder="Notlar..."></textarea></div>
+    <div class="modal-actions">
+      <button class="modal-btn cancel" onclick="closeModal('modal-edit')">İPTAL</button>
+      <button class="modal-btn confirm" onclick="confirmEdit()">💾 KAYDET</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+<div id="app">
+  <div class="titlebar">
+    <div class="dots"><div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div></div>
+    <div class="tb-title">◈ GLOBAL MARKET WATCH</div>
+    <div class="tb-badge">v10.0</div>
+  </div>
+  <div class="clock-section">
+    <div><div class="clock-time" id="clock">--:--<span class="secs">:--</span></div></div>
+    <div class="clock-right">
+      <div class="clock-date" id="clock-date">---</div>
+      <div class="clock-tz">İSTANBUL · UTC+3</div>
+    </div>
+  </div>
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab(0)">BORSALAR</div>
+    <div class="tab" onclick="switchTab(1)">KRİPTO</div>
+    <div class="tab" onclick="switchTab(2)">PİYASA</div>
+    <div class="tab" onclick="switchTab(3)">SENT.</div>
+    <div class="tab" onclick="switchTab(4)">📡PULSE</div>
+    <div class="tab" onclick="switchTab(5)">💼PF</div>
+    <div class="tab" onclick="switchTab(6)">📓GÜNLÜK</div>
+    <div class="tab" onclick="switchTab(7)" id="alarm-tab">🔔ALARM</div>
+  </div>
+
+  <!-- PANEL 0: Exchanges -->
+  <div class="panel active" id="panel-0">
+    <div class="sec-hdr"><span>◆ BORSALAR — İSTANBUL SAATİ</span><span id="active-markets">...</span></div>
+    <div id="exchange-list"></div>
+  </div>
+
+  <!-- PANEL 1: Crypto -->
+  <div class="panel" id="panel-1">
+    <div class="sec-hdr"><span>◆ KRİPTO — 4 SAATLİK GRAFİK</span><span id="crypto-time" style="font-size:9px;color:var(--text-dim)"></span></div>
+    <div id="crypto-list"><div class="loading">VERİ YÜKLENİYOR</div></div>
+  </div>
+
+  <!-- PANEL 2: Market -->
+  <div class="panel" id="panel-2">
+    <div class="sec-hdr"><span>◆ PİYASA VERİLERİ</span><span id="market-time" style="font-size:9px;color:var(--text-dim)"></span></div>
+    <div id="market-list"><div class="loading">VERİ YÜKLENİYOR</div></div>
+  </div>
+
+  <!-- PANEL 3: Sentiment -->
+  <div class="panel" id="panel-3">
+    <div class="sec-hdr"><span>◆ FEAR & GREED</span></div>
+    <div id="fg-section"><div class="loading">YÜKLENİYOR</div></div>
+    <div class="sec-hdr"><span>◆ BTC METRİKLERİ</span></div>
+    <div id="btc-metrics"><div class="loading">YÜKLENİYOR</div></div>
+    <div class="sec-hdr"><span>◆ EKONOMİK TAKVİM</span></div>
+    <div id="calendar-section"></div>
+  </div>
+
+  <!-- PANEL 4: Pulse -->
+  <div class="panel" id="panel-4">
+    <div id="baro-section"><div class="loading">PULSE YÜKLENİYOR</div></div>
+    <div class="news-ctrl">
+      <div class="news-tabs">
+        <div class="news-tab active" onclick="switchNews(0)">🌍 PİYASA HABERLERİ</div>
+        <div class="news-tab" onclick="switchNews(1)">₿ KRİPTO HABERLERİ</div>
+      </div>
+      <div class="news-filters">
+        <button class="nf-btn all active" onclick="setFilter('all')">TÜMÜ</button>
+        <button class="nf-btn HIGH" onclick="setFilter('HIGH')">🔴YÜKSEK</button>
+        <button class="nf-btn MED" onclick="setFilter('MED')">🟡ORTA</button>
+        <button class="nf-btn bullish" onclick="setFilter('bullish')">▲BOĞACI</button>
+        <button class="nf-btn bearish" onclick="setFilter('bearish')">▼AYICI</button>
+      </div>
+      <div class="news-search-wrap">
+        <input class="news-search" id="news-search" placeholder="Haber ara..." oninput="applyFilter()">
+        <button class="news-search-clear" onclick="clearSearch()">✕</button>
+      </div>
+    </div>
+    <div id="news-count" class="news-count"></div>
+    <div id="news-market"><div class="loading">YÜKLENİYOR</div></div>
+    <div id="news-crypto" style="display:none"><div class="loading">YÜKLENİYOR</div></div>
+  </div>
+
+  <!-- PANEL 5: Portfolio -->
+  <div class="panel" id="panel-5">
+    <div class="port-summary">
+      <div class="port-total-label">◆ AÇIK POZİSYONLAR — UNREALIZED K/Z</div>
+      <div class="port-total-val" id="port-total">$0.00</div>
+      <div class="port-total-pnl flat" id="port-pnl">— Henüz pozisyon yok</div>
+      <div class="port-update" id="port-update"></div>
+    </div>
+
+    <div class="port-form">
+      <div class="port-form-title">◆ YENİ POZİSYON</div>
+
+      <!-- FOMO Warning -->
+      <div class="fomo-warn" id="fomo-warn">⚠️ Son 5 dakikada bu sembolde işlem açtın! FOMO mu?</div>
+
+      <!-- Symbol search -->
+      <div class="sym-search-wrap">
+        <input class="sym-input" id="pf-sym-input" placeholder="Sembol ara: BTC, ON, SOL..." autocomplete="off" oninput="onSymSearch()" onblur="setTimeout(closeSymDD,200)">
+        <div class="sym-dropdown" id="sym-dd"></div>
+      </div>
+
+      <div class="pf-grid">
+        <div class="pf-row">
+          <span class="pf-label">BORSA</span>
+          <select class="pf-select" id="pf-exchange"><option>OKX</option><option>BingX</option><option>Binance</option></select>
+        </div>
+        <div class="pf-row">
+          <span class="pf-label">YÖN</span>
+          <select class="pf-select" id="pf-dir"><option value="long">▲ LONG</option><option value="short">▼ SHORT</option></select>
+        </div>
+        <div class="pf-row">
+          <span class="pf-label">MARGIN (USDT)</span>
+          <input class="pf-input" id="pf-margin" type="number" placeholder="örn: 50" step="any" min="0">
+        </div>
+        <div class="pf-row">
+          <span class="pf-label">KALDIRAC</span>
+          <input class="pf-input" id="pf-lev" type="number" placeholder="10" step="1" min="1" value="10">
+        </div>
+        <div class="pf-row" style="grid-column:1/-1">
+          <span class="pf-label">GİRİŞ FİYATI ($)</span>
+          <input class="pf-input" id="pf-entry" type="number" placeholder="örn: 84500" step="any" min="0">
+        </div>
+        <div class="pf-row" style="grid-column:1/-1">
+          <span class="pf-label">GİRİŞ SEBEBİ</span>
+          <select class="pf-select" id="pf-reason">
+            <option value="">Seç...</option>
+            <option>OB Retesti</option>
+            <option>FVG Dolumu</option>
+            <option>Liquidity Sweep + OB</option>
+            <option>Breakout Onayı</option>
+            <option>3-Drive Pattern</option>
+            <option>QM Setup</option>
+            <option>Flag A/B</option>
+            <option>V-Twin</option>
+            <option>Destek/Direnç</option>
+            <option>Haber Sonrası</option>
+            <option>Diğer</option>
+          </select>
+        </div>
+        <div class="pf-row" style="grid-column:1/-1">
+          <span class="pf-label">GİRİŞ TARİHİ</span>
+          <input class="pf-input" id="pf-date" type="datetime-local">
+        </div>
+        <div class="pf-row" style="grid-column:1/-1">
+          <span class="pf-label">NOT (opsiyonel)</span>
+          <input class="pf-input" id="pf-notes" placeholder="Setup notu, hedef fiyat...">
+        </div>
+      </div>
+
+      <!-- Pre-trade checklist -->
+      <div class="checklist-wrap">
+        <div class="checklist-title">
+          <span>◆ PRE-TRADE CHECKLİST</span>
+          <span id="cl-counter">0/8</span>
+        </div>
+        <div id="checklist-items"></div>
+      </div>
+
+      <!-- Add button with countdown -->
+      <div style="position:relative;">
+        <button class="pf-btn" id="pf-add-btn" disabled onclick="startCountdown()">TÜM KRİTERLERİ İŞARETLE</button>
+        <div class="countdown-overlay" id="countdown-overlay" style="display:none">
+          <div class="countdown-num" id="countdown-num">10</div>
+          <div class="countdown-msg">KARAR VERDİN Mİ?<br>EMİN MİSİN?</div>
+          <div class="countdown-cancel" onclick="cancelCountdown()">İPTAL ET</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="port-list-hdr"><span>◆ AÇIK POZİSYONLAR</span><span id="port-count" style="color:var(--text-dim)">0</span></div>
+    <div id="port-list"><div class="port-empty">Henüz pozisyon eklenmedi</div></div>
+  </div>
+
+  <!-- PANEL 6: Journal -->
+  <div class="panel" id="panel-6">
+    <div class="period-tabs">
+      <div class="period-tab active" onclick="setPeriod('all')">TÜMÜ</div>
+      <div class="period-tab" onclick="setPeriod('week')">BU HAFTA</div>
+      <div class="period-tab" onclick="setPeriod('month')">BU AY</div>
+    </div>
+    <div id="journal-stats-wrap"></div>
+    <div id="mistake-analysis-wrap"></div>
+    <div class="sec-hdr"><span>◆ İŞLEM GEÇMİŞİ</span><span id="journal-count" style="color:var(--text-dim)">0 İŞLEM</span></div>
+    <div id="journal-list"><div class="port-empty">Henüz kapatılmış işlem yok</div></div>
+  </div>
+
+  <!-- PANEL 7: Alarm -->
+  <div class="panel" id="panel-7">
+    <div class="alarm-form">
+      <div class="alarm-form-title">◆ YENİ ALARM EKLE</div>
+      <div class="af-row"><span class="af-label">VARLIK</span>
+        <select class="af-select" id="af-asset">
+          <optgroup label="── KRİPTO ──"><option value="btc">Bitcoin (BTC)</option><option value="eth">Ethereum (ETH)</option><option value="xrp">Ripple (XRP)</option></optgroup>
+          <optgroup label="── PİYASA ──"><option value="sp500">S&P 500</option><option value="gold">Altın (XAU)</option><option value="silver">Gümüş (XAG)</option><option value="oil">Ham Petrol</option><option value="dxy">DXY</option></optgroup>
+          <optgroup label="── SENTIMENT ──"><option value="fg_above">Fear&Greed Üstü</option><option value="fg_below">Fear&Greed Altı</option></optgroup>
+        </select>
+      </div>
+      <div class="af-row"><span class="af-label">KOŞUL</span><select class="af-select" id="af-cond"><option value="above">▲ Üzerine çıkarsa</option><option value="below">▼ Altına düşerse</option></select></div>
+      <div class="af-row"><span class="af-label">DEĞER</span><input class="af-input" id="af-value" type="number" placeholder="örn: 85000" step="any"></div>
+      <button class="af-btn" onclick="addAlarm()">+ ALARM EKLE</button>
+    </div>
+    <div class="alarm-list-hdr"><span>◆ AKTİF ALARMLAR</span><span id="alarm-count" style="color:var(--text-dim)">0 ALARM</span></div>
+    <div id="alarm-list"><div class="alarm-empty">Henüz alarm eklenmedi</div></div>
+  </div>
+
+  <div class="footer">
+    <div class="footer-left" id="last-update">BAŞLATILIYOR...</div>
+    <div class="open-badge none" id="open-badge">— AÇIK</div>
+  </div>
+</div>
+
+<script>
+// ══ CHECKLIST ══════════════════════════════════════════════════
+const CHECKLIST = [
+  { id:'liq',   text:'BSL / SSL alındı mı? (Likidite Sweep)',  critical:true  },
+  { id:'htf',   text:'HTF (1D) yapısıyla uyumlu mu?',          critical:true  },
+  { id:'ob',    text:'OB / FVG doğrulandı mı?',                critical:false },
+  { id:'candle',text:'Saatlik mum kapanışı beklendi mi?',       critical:true  },
+  { id:'sl',    text:'Stop Loss yeri belirlendi mi?',           critical:true  },
+  { id:'rr',    text:'R/R en az 1:2.5 mi?',                    critical:false },
+  { id:'fat',   text:'Sembol, yön ve margin doğru mu? (Fat finger)',critical:true},
+  { id:'plan',  text:'Bu plan dışı / FOMO işlem değil mi?',    critical:true  },
+];
+
+const MISTAKES = [
+  'Likidite alınmadan giriş',
+  'Erken giriş (setup tamamlanmadı)',
+  'FOMO',
+  'Fat finger',
+  'Stop koymadım',
+  'Fazla kaldıraç',
+  'Likidasyon',
+  'Haberden etkilendim',
+  'Plan dışı işlem',
+  'Diğer',
+];
+
+let checklistState = {};
+CHECKLIST.forEach(c => checklistState[c.id] = false);
+
+function renderChecklist() {
+  const el = document.getElementById('checklist-items');
+  el.innerHTML = CHECKLIST.map(c => `
+    <div class="cl-item ${c.critical?'critical':''}" onclick="toggleCheck('${c.id}')">
+      <div class="cl-checkbox ${checklistState[c.id]?'checked':''}" id="clbox-${c.id}"></div>
+      <div class="cl-text">${c.text}</div>
+    </div>`).join('');
+  updateChecklistCounter();
+}
+
+function toggleCheck(id) {
+  checklistState[id] = !checklistState[id];
+  const box = document.getElementById('clbox-'+id);
+  if(box) box.classList.toggle('checked', checklistState[id]);
+  updateChecklistCounter();
+}
+
+function updateChecklistCounter() {
+  const done = Object.values(checklistState).filter(Boolean).length;
+  const total = CHECKLIST.length;
+  document.getElementById('cl-counter').textContent = `${done}/${total}`;
+  const allDone = done === total;
+  const btn = document.getElementById('pf-add-btn');
+  if(btn) {
+    btn.disabled = !allDone;
+    btn.textContent = allDone ? '▶ POZİSYON EKLE (10sn)' : `TÜM KRİTERLERİ İŞARETLE (${done}/${total})`;
+    btn.className = 'pf-btn' + (allDone ? ' countdown' : '');
+  }
+}
+
+// ── Countdown ────────────────────────────────────────────────
+let countdownTimer = null;
+let countdownSec = 10;
+
+function startCountdown() {
+  countdownSec = 10;
+  const overlay = document.getElementById('countdown-overlay');
+  const numEl = document.getElementById('countdown-num');
+  overlay.style.display = 'flex';
+  numEl.textContent = countdownSec;
+  countdownTimer = setInterval(() => {
+    countdownSec--;
+    numEl.textContent = countdownSec;
+    if(countdownSec <= 0) {
+      clearInterval(countdownTimer);
+      overlay.style.display = 'none';
+      addPosition();
+    }
+  }, 1000);
+}
+
+function cancelCountdown() {
+  clearInterval(countdownTimer);
+  document.getElementById('countdown-overlay').style.display = 'none';
+  showToast('İPTAL EDİLDİ', 'İşlem iptal edildi. Doğru karar mıydı?');
+}
+
+// ══ EXCHANGES ══════════════════════════════════════════════════
+const EXCHANGES=[
+  {region:'AVRUPA',id:'bist',name:'Borsa İstanbul',index:'BIST 100',flag:'🇹🇷',tz:'Europe/Istanbul',open:{h:10,m:0},close:{h:18,m:0}},
+  {id:'frankfurt',name:'Frankfurt XETRA',index:'DAX 40',flag:'🇩🇪',tz:'Europe/Berlin',open:{h:9,m:0},close:{h:17,m:30}},
+  {id:'paris',name:'Euronext Paris',index:'CAC 40',flag:'🇫🇷',tz:'Europe/Paris',open:{h:9,m:0},close:{h:17,m:35}},
+  {id:'london',name:'London Stock Exch.',index:'FTSE 100',flag:'🇬🇧',tz:'Europe/London',open:{h:8,m:0},close:{h:16,m:30}},
+  {region:'AMERİKA',id:'nyse',name:'NYSE',index:'S&P 500',flag:'🇺🇸',tz:'America/New_York',open:{h:9,m:30},close:{h:16,m:0},premarket:{open:{h:4,m:0},close:{h:9,m:30}},afterhours:{open:{h:16,m:0},close:{h:20,m:0}}},
+  {id:'nasdaq',name:'NASDAQ',index:'NASDAQ Composite',flag:'🇺🇸',tz:'America/New_York',open:{h:9,m:30},close:{h:16,m:0},premarket:{open:{h:4,m:0},close:{h:9,m:30}},afterhours:{open:{h:16,m:0},close:{h:20,m:0}}},
+  {region:'ASYA — PASİFİK',id:'tokyo',name:'Tokyo TSE',index:'Nikkei 225',flag:'🇯🇵',tz:'Asia/Tokyo',open:{h:9,m:0},close:{h:15,m:30},lunch:{start:{h:11,m:30},end:{h:12,m:30}}},
+  {id:'shanghai',name:'Shanghai SSE',index:'SSE Composite',flag:'🇨🇳',tz:'Asia/Shanghai',open:{h:9,m:30},close:{h:15,m:0},lunch:{start:{h:11,m:30},end:{h:13,m:0}}},
+  {id:'hk',name:'Hong Kong HKEX',index:'Hang Seng',flag:'🇭🇰',tz:'Asia/Hong_Kong',open:{h:9,m:30},close:{h:16,m:0},lunch:{start:{h:12,m:0},end:{h:13,m:0}}},
+  {id:'sydney',name:'Sydney ASX',index:'ASX 200',flag:'🇦🇺',tz:'Australia/Sydney',open:{h:10,m:0},close:{h:16,m:0}},
+];
+const ALL_EVENTS=[
+  {date:'2026-04-03',type:'NFP',desc:'ABD İstihdam (NFP)'},{date:'2026-04-10',type:'CPI',desc:'ABD Enflasyon (CPI)'},
+  {date:'2026-05-01',type:'NFP',desc:'ABD İstihdam (NFP)'},{date:'2026-05-06',type:'FOMC',desc:'Fed Faiz Kararı'},
+  {date:'2026-05-13',type:'CPI',desc:'ABD Enflasyon (CPI)'},{date:'2026-06-05',type:'NFP',desc:'ABD İstihdam (NFP)'},
+  {date:'2026-06-11',type:'CPI',desc:'ABD Enflasyon (CPI)'},{date:'2026-06-17',type:'FOMC',desc:'Fed Faiz Kararı'},
+  {date:'2026-07-03',type:'NFP',desc:'ABD İstihdam (NFP)'},{date:'2026-07-29',type:'FOMC',desc:'Fed Faiz Kararı'},
+];
+
+// ══ HELPERS ══════════════════════════════════════════════════
+const p2=n=>String(n).padStart(2,'0');
+const hm=(h,m)=>`${p2(h)}:${p2(m)}`;
+const istTS=()=>new Date().toLocaleTimeString('tr-TR',{timeZone:'Europe/Istanbul',hour12:false,hour:'2-digit',minute:'2-digit'});
+function fmtPrice(n,dec=2){if(!n||n===0)return'---';if(n>=10000)return n.toLocaleString('en-US',{maximumFractionDigits:0});if(n>=1000)return n.toLocaleString('en-US',{minimumFractionDigits:dec,maximumFractionDigits:dec});if(n>=1)return n.toFixed(dec);return n.toFixed(4);}
+function fmtUSD(n){if(n===null||n===undefined)return'---';const abs=Math.abs(n);const sign=n<0?'-':'';if(abs>=1e6)return`${sign}$${(abs/1e6).toFixed(2)}M`;if(abs>=1000)return`${sign}$${abs.toLocaleString('en-US',{maximumFractionDigits:0})}`;return`${sign}$${abs.toFixed(2)}`;}
+function timeAgo(iso){try{const diff=Math.floor((Date.now()-new Date(iso))/60000);if(diff<1)return'az önce';if(diff<60)return`${diff}dk önce`;if(diff<1440)return`${Math.floor(diff/60)}sa önce`;return`${Math.floor(diff/1440)}g önce`;}catch{return'';}}
+function fmtDate(s){if(!s)return'---';try{return new Date(s).toLocaleString('tr-TR',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'});}catch{return s;}}
+
+function seededRng(seed){let s=seed;return()=>{s=(s+0x6D2B79F5)>>>0;let t=Math.imul(s^s>>>15,1|s);t=(t+Math.imul(t^t>>>7,61|t))^t;return((t^t>>>14)>>>0)/4294967296;};}
+function strHash(str){let h=0;for(let i=0;i<str.length;i++)h=(Math.imul(31,h)+str.charCodeAt(i))|0;return Math.abs(h);}
+function generateSparkData(exId,progress){const today=new Date().toISOString().slice(0,10);const rng=seededRng(strHash(exId+today));const PTS=60;const px=[0];for(let i=1;i<PTS;i++)px.push(px[i-1]+(rng()-.47)*.9+(rng()-.5)*.3);const vis=Math.max(3,Math.round(PTS*Math.min(1,progress)));const sl=px.slice(0,vis);const mn=Math.min(...sl),mx=Math.max(...sl),rng2=mx-mn||.01;const raw=sl[sl.length-1]-sl[0];return{slice:sl,min:mn,range:rng2,pctChange:((raw/(Math.abs(sl[0])+.01))*100).toFixed(2),isUp:raw>=0};}
+function buildSparkSVG(data,W,H){const{slice,min,range,isUp}=data;const pd=2;const pts=slice.map((v,i)=>[(i/(slice.length-1))*(W-pd*2)+pd,H-pd-((v-min)/range)*(H-pd*2)]);const col=isUp?'#00e87a':'#ff2255';const fill=isUp?'rgba(0,232,122,0.09)':'rgba(255,34,85,0.08)';let line=pts.map((p,i)=>`${i===0?'M':'L'}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');let area=line+` L${pts[pts.length-1][0].toFixed(1)},${H} L${pts[0][0].toFixed(1)},${H} Z`;const[lx,ly]=pts[pts.length-1];let grid='';for(let g=1;g<=3;g++){const gy=((H/4)*g).toFixed(1);grid+=`<line x1="0" y1="${gy}" x2="${W}" y2="${gy}" stroke="rgba(255,255,255,0.03)" stroke-width="1"/>`;}return`<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${grid}<path d="${area}" fill="${fill}"/><path d="${line}" fill="none" stroke="${col}" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${lx.toFixed(1)}" cy="${ly.toFixed(1)}" r="2.5" fill="${col}" style="filter:drop-shadow(0 0 4px ${col})"/></svg>`;}
+function localNow(tz){const d=new Date();const parts=new Intl.DateTimeFormat('en-US',{timeZone:tz,hour:'2-digit',minute:'2-digit',weekday:'short',hour12:false}).formatToParts(d);const get=t=>parts.find(p=>p.type===t)?.value;const h=parseInt(get('hour')),m=parseInt(get('minute'));return{h,m,wd:get('weekday'),total:h*60+m};}
+function tzDiff(tz){const d=new Date();const toM=t=>{const p=new Intl.DateTimeFormat('en-US',{timeZone:t,hour:'2-digit',minute:'2-digit',hour12:false}).formatToParts(d);return parseInt(p.find(x=>x.type==='hour').value)*60+parseInt(p.find(x=>x.type==='minute').value);};let diff=toM('Europe/Istanbul')-toM(tz);if(diff>720)diff-=1440;if(diff<-720)diff+=1440;return diff;}
+function toIst(tz,h,m){const t=((h*60+m+tzDiff(tz))%1440+1440)%1440;return{h:Math.floor(t/60),m:t%60};}
+function minsToHuman(mins){if(mins<0)mins=0;const h=Math.floor(mins/60),m=mins%60;if(!h)return`${m}dk`;if(!m)return`${h}sa`;return`${h}sa ${m}dk`;}
+function getStatus(ex){const{h,m,wd,total}=localNow(ex.tz);if(['Sat','Sun'].includes(wd))return{key:'closed',label:'KAPALI',sub:'HAFTA SONU',progress:0};const openM=ex.open.h*60+ex.open.m,closeM=ex.close.h*60+ex.close.m;if(ex.premarket){const pmO=ex.premarket.open.h*60+ex.premarket.open.m,pmC=ex.premarket.close.h*60+ex.premarket.close.m;if(total>=pmO&&total<pmC)return{key:'pre',label:'PRE-MKT',sub:`${minsToHuman(pmC-total)} sonra açılır`,progress:(total-pmO)/(pmC-pmO)};}if(total<openM)return{key:'closed',label:'KAPALI',sub:`${minsToHuman(openM-total)} sonra açılır`,subCls:'opening',progress:0};if(total>=closeM){if(ex.afterhours){const ahC=ex.afterhours.close.h*60+ex.afterhours.close.m;if(total<ahC)return{key:'pre',label:'AH-MKT',sub:`${minsToHuman(ahC-total)} sonra biter`,progress:(total-closeM)/(ahC-closeM)};}return{key:'closed',label:'KAPALI',sub:'Seans bitti',progress:1};}if(ex.lunch){const ls=ex.lunch.start.h*60+ex.lunch.start.m,le=ex.lunch.end.h*60+ex.lunch.end.m;if(total>=ls&&total<le)return{key:'lunch',label:'ÖĞLE',sub:`${minsToHuman(le-total)} sonra açılır`,subCls:'opening',progress:(ls-openM)/(closeM-openM)};}const progress=(total-openM)/(closeM-openM),rem=closeM-total;return{key:'open',label:'AÇIK',sub:rem<=60?`${minsToHuman(rem)} sonra kapanır`:`${minsToHuman(rem)} açık kalır`,subCls:rem<=30?'soon':'',progress};}
+
+function drawCandles(canvas,candles){if(!candles||candles.length<2)return;const W=canvas.parentElement.clientWidth||452;const H=90;canvas.width=W;canvas.height=H;const ctx=canvas.getContext('2d');ctx.clearRect(0,0,W,H);const prices=candles.flatMap(c=>[c.h,c.l]);const minP=Math.min(...prices),maxP=Math.max(...prices),range=maxP-minP||1;const padY=6;const toY=p=>padY+(1-(p-minP)/range)*(H-padY*2);const n=candles.length,slotW=W/n,bodyW=Math.max(1.5,slotW*.55);ctx.strokeStyle='rgba(255,255,255,0.04)';ctx.lineWidth=1;for(let g=1;g<=4;g++){const gy=(H/5)*g;ctx.beginPath();ctx.moveTo(0,gy);ctx.lineTo(W,gy);ctx.stroke();}const vols=candles.map(c=>c.v||0),maxVol=Math.max(...vols)||1,volH=H*.14;candles.forEach((c,i)=>{const x=(i+.5)*slotW,vh=(c.v/maxVol)*volH;ctx.fillStyle=c.c>=c.o?'rgba(0,232,122,0.18)':'rgba(255,34,85,0.18)';ctx.fillRect(x-bodyW/2,H-vh,bodyW,vh);});candles.forEach((c,i)=>{const x=(i+.5)*slotW,isUp=c.c>=c.o;const col=isUp?'#00e87a':'#ff2255';const yH=toY(c.h),yL=toY(c.l),yO=toY(c.o),yC=toY(c.c);const yTop=Math.min(yO,yC),yBot=Math.max(yO,yC),bodyH=Math.max(1,yBot-yTop);ctx.strokeStyle=col;ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x,yH);ctx.lineTo(x,yL);ctx.stroke();ctx.fillStyle=isUp?'rgba(0,232,122,0.8)':'rgba(255,34,85,0.8)';ctx.fillRect(x-bodyW/2,yTop,bodyW,bodyH);});const last=candles[candles.length-1];ctx.strokeStyle=last.c>=last.o?'rgba(0,232,122,0.3)':'rgba(255,34,85,0.3)';ctx.lineWidth=1;ctx.setLineDash([3,4]);ctx.beginPath();ctx.moveTo(0,toY(last.c));ctx.lineTo(W,toY(last.c));ctx.stroke();ctx.setLineDash([]);}
+function drawFearGreed(canvas,value){const W=220,H=120;canvas.width=W;canvas.height=H;const ctx=canvas.getContext('2d');ctx.clearRect(0,0,W,H);const cx=W/2,cy=H-12,r=82;ctx.beginPath();ctx.arc(cx,cy,r,Math.PI,0,false);ctx.strokeStyle='rgba(255,255,255,0.07)';ctx.lineWidth=15;ctx.lineCap='round';ctx.stroke();const zones=[{from:0,to:.25,col:'#ff2255'},{from:.25,to:.45,col:'#ff6600'},{from:.45,to:.55,col:'#ffaa00'},{from:.55,to:.75,col:'#88cc22'},{from:.75,to:1,col:'#00e87a'}];zones.forEach(z=>{ctx.beginPath();ctx.arc(cx,cy,r,Math.PI+z.from*Math.PI,Math.PI+z.to*Math.PI,false);ctx.strokeStyle=z.col;ctx.lineWidth=15;ctx.lineCap='butt';ctx.globalAlpha=(value/100)>=z.from?1:0.18;ctx.stroke();ctx.globalAlpha=1;});const angle=Math.PI+(value/100)*Math.PI;const nx=cx+(r-9)*Math.cos(angle),ny=cy+(r-9)*Math.sin(angle);ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(nx,ny);ctx.strokeStyle='rgba(255,255,255,0.9)';ctx.lineWidth=2;ctx.lineCap='round';ctx.stroke();ctx.beginPath();ctx.arc(cx,cy,5,0,Math.PI*2);ctx.fillStyle='#ffffff';ctx.fill();const arcCol=value<25?'#ff2255':value<45?'#ff6600':value<55?'#ffaa00':value<75?'#88cc22':'#00e87a';ctx.font="bold 26px 'Share Tech Mono'";ctx.fillStyle=arcCol;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(value,cx,cy-30);ctx.font="10px 'Share Tech Mono'";ctx.fillStyle='rgba(255,255,255,0.25)';ctx.textAlign='left';ctx.fillText('0',cx-r-4,cy+4);ctx.textAlign='right';ctx.fillText('100',cx+r+4,cy+4);}
+
+function computeBarometer(mNews,cNews){const all=[...(mNews||[]),...(cNews||[])];if(!all.length)return null;let total=0,bear=0,bull=0,high=0,med=0;all.forEach(n=>{total+=n.score;if(n.direction==='bearish')bear+=n.score;else if(n.direction==='bullish')bull+=n.score;if(n.level==='HIGH')high++;else if(n.level==='MED')med++;});const pulse=Math.round(Math.min(100,(total/all.length)*10));const sentiment=bull>bear?'BULLISH':bear>bull?'BEARISH':'NÖTR';const sentCol=sentiment==='BULLISH'?'var(--green)':sentiment==='BEARISH'?'var(--red)':'var(--amber)';return{pulse,sentiment,sentCol,highCount:high,medCount:med,bullScore:Math.round(bull),bearScore:Math.round(bear)};}
+function renderBarometer(baro){const el=document.getElementById('baro-section');if(!baro){el.innerHTML='<div class="loading">VERİ BEKLENİYOR</div>';return;}const pulseCol=baro.pulse>=65?'var(--red)':baro.pulse>=40?'var(--amber)':'var(--green)';const pulseLabel=baro.pulse>=65?'YÜKSEK ETKİ':baro.pulse>=40?'ORTA ETKİ':'DÜŞÜK ETKİ';el.innerHTML=`<div class="baro-wrap"><div class="baro-title"><span>◆ HABER ETKİ BAROMETRESI</span><span style="color:${baro.sentCol}">${baro.sentiment}</span></div><div class="baro-gauge-row"><div class="baro-gauge"><div class="baro-fill" style="width:${baro.pulse}%;background:linear-gradient(90deg,${pulseCol}88,${pulseCol})"></div></div><div class="baro-val" style="color:${pulseCol}">${baro.pulse}</div></div><div class="baro-label" style="color:${pulseCol}">${pulseLabel}</div><div class="baro-zones"><div class="baro-zone" style="background:rgba(0,232,122,0.5)"></div><div class="baro-zone" style="background:rgba(0,232,122,0.3)"></div><div class="baro-zone" style="background:rgba(255,170,0,0.5)"></div><div class="baro-zone" style="background:rgba(255,34,85,0.4)"></div><div class="baro-zone" style="background:rgba(255,34,85,0.7)"></div></div><div class="baro-breakdown"><div class="baro-sub"><div class="baro-sub-label">YÜKSEK</div><div class="baro-sub-val" style="color:var(--red)">${baro.highCount}</div></div><div class="baro-sub"><div class="baro-sub-label">ORTA</div><div class="baro-sub-val" style="color:var(--amber)">${baro.medCount}</div></div><div class="baro-sub"><div class="baro-sub-label">BOĞACI</div><div class="baro-sub-val" style="color:var(--green)">${baro.bullScore}</div></div><div class="baro-sub"><div class="baro-sub-label">AYICI</div><div class="baro-sub-val" style="color:var(--red)">${baro.bearScore}</div></div></div></div>`;}
+
+let activeFilter='all',activeNewsTab=0;
+function setFilter(f){activeFilter=f;document.querySelectorAll('.nf-btn').forEach(b=>{b.classList.toggle('active',b.classList.contains(f)||(f==='all'&&b.classList.contains('all')));});applyFilter();}
+function applyFilter(){const search=(document.getElementById('news-search').value||'').toLowerCase().trim();const src=activeNewsTab===0?state.newsMarket:state.newsCrypto;if(!src)return;let filtered=src.filter(n=>{if(activeFilter==='HIGH'&&n.level!=='HIGH')return false;if(activeFilter==='MED'&&n.level!=='MED')return false;if(activeFilter==='bullish'&&n.direction!=='bullish')return false;if(activeFilter==='bearish'&&n.direction!=='bearish')return false;if(search&&!n.title.toLowerCase().includes(search))return false;return true;});const elId=activeNewsTab===0?'news-market':'news-crypto';renderNewsItems(filtered,elId,activeNewsTab===1);document.getElementById('news-count').textContent=`${filtered.length} haber`;}
+function clearSearch(){document.getElementById('news-search').value='';applyFilter();}
+function openNews(url){if(url)fetch(`/api/open?url=${encodeURIComponent(url)}`);}
+function renderNewsItems(items,elId,isCrypto){const el=document.getElementById(elId);if(!items||!items.length){el.innerHTML='<div class="err">Haber bulunamadı</div>';return;}let html='';items.forEach(n=>{const pct=(n.score/10*100).toFixed(0);const votes=isCrypto&&(n.bull||n.bear)?`<div style="display:flex;gap:8px;margin-top:4px;"><span style="font-family:'Share Tech Mono';font-size:9px;color:var(--green)">▲ ${n.bull}</span><span style="font-family:'Share Tech Mono';font-size:9px;color:var(--red)">▼ ${n.bear}</span></div>`:'';const tags=(n.tags||[]).slice(0,3).map(t=>`<span class="news-tag">${t}</span>`).join('');const safeUrl=(n.url||'').replace(/'/g,"\\'");html+=`<div class="news-item ${n.level}" onclick="openNews('${safeUrl}')"><div class="news-header"><span class="impact-badge ${n.level}">${n.level}</span><span class="dir-badge ${n.direction}">${n.direction==='bullish'?'▲ BOĞACI':n.direction==='bearish'?'▼ AYICI':'— NÖTR'}</span><span class="news-src">${n.source||''}</span></div><div class="news-title">${n.title}</div><div class="score-bar"><div class="score-fill ${n.level}" style="width:${pct}%"></div></div><div class="news-footer"><span class="news-time">${timeAgo(n.published)}</span>${tags}</div>${votes}</div>`;});el.innerHTML=html;}
+
+// ══ PORTFOLIO ══════════════════════════════════════════════════
+let allSymbols=[],selectedSym=null,portPrices={};
+let activeCloseId=null,activeEditId=null,activeClosePosData=null;
+let journalPeriod='all';
+
+async function loadSymbols(){try{allSymbols=await fetch('/api/futures/symbols').then(r=>r.json());}catch{allSymbols=[];}}
+
+function onSymSearch(){
+  const q=document.getElementById('pf-sym-input').value.trim().toUpperCase();
+  const dd=document.getElementById('sym-dd');
+  if(!q){dd.classList.remove('open');return;}
+  const matches=allSymbols.filter(s=>s.base.startsWith(q)||s.symbol.startsWith(q)).slice(0,12);
+  if(!matches.length){dd.classList.remove('open');return;}
+  dd.innerHTML=matches.map(s=>`<div class="sym-option" onclick="selectSym('${s.symbol}','${s.base}','${s.quote}')">${s.base}/USDT</div>`).join('');
+  dd.classList.add('open');
+}
+
+function selectSym(symbol,base,quote){
+  selectedSym={symbol,base,quote};
+  document.getElementById('pf-sym-input').value=`${base}/USDT`;
+  document.getElementById('sym-dd').classList.remove('open');
+  // FOMO check
+  checkRecentTrade(symbol);
+}
+
+async function checkRecentTrade(symbol){
+  try{
+    const r=await fetch(`/api/portfolio`).then(r=>r.json());
+    const now=Date.now();
+    const recent=r.filter(p=>p.symbol===symbol&&(now-p.id)<5*60*1000);
+    const warn=document.getElementById('fomo-warn');
+    if(warn) warn.classList.toggle('show',recent.length>0);
+  }catch{}
+}
+
+function closeSymDD(){document.getElementById('sym-dd').classList.remove('open');}
+
+function setDefaultDate(){
+  const el=document.getElementById('pf-date');
+  if(el&&!el.value){const now=new Date();const offset=now.getTimezoneOffset();const local=new Date(now.getTime()-offset*60000);el.value=local.toISOString().slice(0,16);}
+}
+
+async function addPosition(){
+  if(!selectedSym){showToast('HATA','Sembol seç!');return;}
+  const margin=parseFloat(document.getElementById('pf-margin').value);
+  const lev=parseFloat(document.getElementById('pf-lev').value)||10;
+  const entry=parseFloat(document.getElementById('pf-entry').value);
+  if(!margin||isNaN(margin)||margin<=0){showToast('HATA','Margin girin!');return;}
+  if(!entry||isNaN(entry)||entry<=0){showToast('HATA','Giriş fiyatı girin!');return;}
+  await fetch('/api/portfolio',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+    exchange:document.getElementById('pf-exchange').value,
+    symbol:selectedSym.symbol,base:selectedSym.base,
+    direction:document.getElementById('pf-dir').value,
+    margin,leverage:lev,entry,
+    entry_date:document.getElementById('pf-date').value,
+    reason:document.getElementById('pf-reason').value,
+    notes:document.getElementById('pf-notes').value,
+    checklist:Object.assign({},checklistState),
+  })});
+  // Reset form
+  ['pf-sym-input','pf-margin','pf-entry','pf-notes'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('pf-lev').value='10';
+  document.getElementById('pf-reason').value='';
+  selectedSym=null;
+  CHECKLIST.forEach(c=>checklistState[c.id]=false);
+  renderChecklist();
+  document.getElementById('fomo-warn').classList.remove('show');
+  showToast('EKLENDI','Pozisyon başarıyla eklendi!','green');
+  await refreshPortfolio();
+}
+
+async function deletePosition(id){await fetch(`/api/portfolio/${id}`,{method:'DELETE'});await refreshPortfolio();}
+
+// ── Close modal ──────────────────────────────────────────────
+function openCloseModal(id,pos){
+  activeCloseId=id;
+  activeClosePosData=pos;
+  document.getElementById('mc-exit-price').value=portPrices[pos.symbol]?.price||'';
+  const now=new Date();const offset=now.getTimezoneOffset();const local=new Date(now.getTime()-offset*60000);
+  document.getElementById('mc-exit-date').value=local.toISOString().slice(0,16);
+  document.getElementById('mc-exit-reason').value='';
+  document.getElementById('mc-exit-notes').value='';
+  document.getElementById('mc-is-liq').checked=false;
+  // Render mistakes checkboxes
+  const mg=document.getElementById('mistakes-grid');
+  mg.innerHTML=MISTAKES.map(m=>`<label class="mcheck"><input type="checkbox" value="${m}"><div class="mcheck-box"></div><span class="mcheck-label">${m}</span></label>`).join('');
+  updatePnlPreview();
+  // Show liq row if reason is liq
+  document.getElementById('mc-exit-reason').addEventListener('change',()=>{
+    const isLiq=document.getElementById('mc-exit-reason').value==='Likidasyon';
+    document.getElementById('mc-liq-row').style.display=isLiq?'block':'none';
+    if(isLiq) document.getElementById('mc-is-liq').checked=true;
+  });
+  document.getElementById('modal-close').classList.add('open');
+}
+
+function updatePnlPreview(){
+  const exitPrice=parseFloat(document.getElementById('mc-exit-price').value);
+  const el=document.getElementById('mc-pnl-preview');
+  if(!exitPrice||!activeClosePosData){el.style.display='none';return;}
+  const{margin,leverage,entry,direction}=activeClosePosData;
+  if(!entry)return;
+  const pct=(exitPrice-entry)/entry;
+  const sign=direction==='long'?1:-1;
+  const pnl=margin*leverage*pct*sign;
+  const pnlPct=pnl/margin*100;
+  const isP=pnl>=0;
+  el.style.display='block';
+  el.style.color=isP?'var(--green)':'var(--red)';
+  el.textContent=`${isP?'+':''}${fmtUSD(pnl)} (${isP?'+':''}${pnlPct.toFixed(2)}%)`;
+}
+
+async function confirmClose(){
+  const exitPrice=parseFloat(document.getElementById('mc-exit-price').value);
+  if(!exitPrice||isNaN(exitPrice)){showToast('HATA','Çıkış fiyatı girin!');return;}
+  const mistakes=[...document.querySelectorAll('#mistakes-grid input:checked')].map(el=>el.value);
+  const r=await fetch(`/api/portfolio/${activeCloseId}/close`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+    exit_price:exitPrice,
+    exit_date:document.getElementById('mc-exit-date').value,
+    exit_reason:document.getElementById('mc-exit-reason').value,
+    exit_notes:document.getElementById('mc-exit-notes').value,
+    is_liquidation:document.getElementById('mc-is-liq').checked,
+    mistakes,
+  })}).then(r=>r.json());
+  closeModal('modal-close');
+  const sign=r.pnl>=0?'+':'';
+  showToast('POZİSYON KAPATILDI',`${sign}${fmtUSD(r.pnl)} (${sign}${r.pnl_pct?.toFixed(2)}%)`,r.pnl>=0?'green':'');
+  await refreshPortfolio();
+  if(journalPeriod) renderJournal();
+}
+
+// ── Edit modal ───────────────────────────────────────────────
+async function openEditModal(id){
+  activeEditId=id;
+  const positions=await fetch('/api/portfolio').then(r=>r.json());
+  const pos=positions.find(p=>p.id===id);
+  if(!pos)return;
+  document.getElementById('me-entry').value=pos.entry;
+  document.getElementById('me-margin').value=pos.margin;
+  document.getElementById('me-lev').value=pos.leverage;
+  document.getElementById('me-reason').value=pos.reason||'';
+  document.getElementById('me-notes').value=pos.notes||'';
+  document.getElementById('modal-edit').classList.add('open');
+}
+async function confirmEdit(){
+  await fetch(`/api/portfolio/${activeEditId}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+    entry:parseFloat(document.getElementById('me-entry').value),
+    margin:parseFloat(document.getElementById('me-margin').value),
+    leverage:parseFloat(document.getElementById('me-lev').value)||1,
+    reason:document.getElementById('me-reason').value,
+    notes:document.getElementById('me-notes').value,
+  })});
+  closeModal('modal-edit');
+  await refreshPortfolio();
+}
+function closeModal(id){document.getElementById(id).classList.remove('open');}
+
+// ── Refresh portfolio ────────────────────────────────────────
+async function refreshPortfolio(){
+  const positions=await fetch('/api/portfolio').then(r=>r.json()).catch(()=>[]);
+  document.getElementById('port-count').textContent=`${positions.length} POZİSYON`;
+  if(!positions.length){
+    document.getElementById('port-list').innerHTML='<div class="port-empty">Henüz pozisyon eklenmedi</div>';
+    document.getElementById('port-total').textContent='$0.00';
+    document.getElementById('port-pnl').className='port-total-pnl flat';
+    document.getElementById('port-pnl').textContent='— Pozisyon ekleyerek başla';
+    return;
+  }
+  const symbols=[...new Set(positions.map(p=>p.symbol))];
+  try{const prices=await fetch('/api/portfolio/prices',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({symbols})}).then(r=>r.json());portPrices=prices;}catch{}
+  let totalPnl=0,html='';
+  positions.forEach(p=>{
+    const pd=portPrices[p.symbol]||{};const currentPrice=pd.price||0;
+    const{margin,leverage:lev,entry,direction}=p;
+    let pnl=0;
+    if(currentPrice>0&&entry>0){const pct=(currentPrice-entry)/entry;const sign=direction==='long'?1:-1;pnl=margin*lev*pct*sign;}
+    totalPnl+=pnl;
+    const isP=pnl>=0;const cls=isP?'profit':'loss';const pc=isP?'up':'down';const sign2=isP?'+':'';
+    const pnlPct=margin>0?(pnl/margin*100):0;
+    const barPct=Math.min(100,Math.abs(pnlPct)*2);
+    const liqDisplay=p.liq_price>0?`$${p.liq_price.toLocaleString('en-US',{maximumFractionDigits:4})}`:'---';
+    html+=`<div class="pos-card ${cls}"><div class="pos-dir-bar"></div>
+      <div class="pos-top">
+        <div>
+          <div class="pos-sym">${p.base}/USDT</div>
+          <div class="pos-meta">
+            <span class="pos-badge ${direction}">${direction==='long'?'▲ LONG':'▼ SHORT'}</span>
+            <span class="pos-badge exch">${p.exchange}</span>
+            <span class="pos-badge lev">${lev}x</span>
+          </div>
+        </div>
+        <div class="pos-right">
+          <div class="pos-pnl-usd ${pc}">${currentPrice>0?`${sign2}${fmtUSD(pnl)}`:'Bekleniyor'}</div>
+          <div class="pos-pnl-pct ${pc}">${currentPrice>0?`${sign2}${pnlPct.toFixed(2)}%`:''}</div>
+        </div>
+      </div>
+      <div class="pos-stats">
+        <div class="pos-stat"><div class="pos-stat-label">GİRİŞ</div><div class="pos-stat-val">$${entry.toLocaleString('en-US',{maximumFractionDigits:6})}</div></div>
+        <div class="pos-stat"><div class="pos-stat-label">GÜNCEL</div><div class="pos-stat-val">${currentPrice>0?'$'+currentPrice.toLocaleString('en-US',{maximumFractionDigits:6}):'---'}</div></div>
+        <div class="pos-stat"><div class="pos-stat-label">MARGIN</div><div class="pos-stat-val">${fmtUSD(margin)}</div></div>
+        <div class="pos-stat"><div class="pos-stat-label">LİK. FİYATI</div><div class="pos-stat-val liq">${liqDisplay}</div></div>
+        <div class="pos-stat"><div class="pos-stat-label">COIN MİKT.</div><div class="pos-stat-val">${p.coin_qty} ${p.base}</div></div>
+        <div class="pos-stat"><div class="pos-stat-label">POZİSYON</div><div class="pos-stat-val">${fmtUSD(margin*lev)}</div></div>
+      </div>
+      ${p.reason?`<div class="pos-reason">📝 ${p.reason}</div>`:''}
+      ${p.entry_date?`<div class="pos-date">📅 ${fmtDate(p.entry_date)}</div>`:''}
+      <div class="pnl-bar-wrap"><div class="pnl-bar-fill ${pc}" style="width:${barPct}%"></div></div>
+      <div class="pos-actions">
+        <button class="pos-act-btn close-btn" onclick="openCloseModal(${p.id},${JSON.stringify(p).replace(/"/g,"'")})">✅ KAPAT</button>
+        <button class="pos-act-btn edit-btn" onclick="openEditModal(${p.id})">✏️ DÜZENLE</button>
+        <button class="pos-act-btn del-btn" onclick="deletePosition(${p.id})">🗑 SİL</button>
+      </div>
+    </div>`;
+  });
+  document.getElementById('port-list').innerHTML=html;
+  const isP=totalPnl>=0;
+  document.getElementById('port-total').textContent=fmtUSD(totalPnl);
+  const pnlEl=document.getElementById('port-pnl');
+  pnlEl.textContent=`${isP?'+':''}${fmtUSD(totalPnl)} unrealized K/Z — ${positions.length} pozisyon`;
+  pnlEl.className=`port-total-pnl ${isP?'up':'down'}`;
+  document.getElementById('port-update').textContent=`Son güncelleme: ${istTS()}`;
+}
+
+// ══ JOURNAL ══════════════════════════════════════════════════
+function setPeriod(p){
+  journalPeriod=p;
+  document.querySelectorAll('.period-tab').forEach((t,i)=>{
+    t.classList.toggle('active',['all','week','month'][i]===p);
+  });
+  renderJournal();
+}
+
+function filterByPeriod(entries){
+  if(journalPeriod==='all')return entries;
+  const now=Date.now();
+  const cutoff=journalPeriod==='week'?7*24*60*60*1000:30*24*60*60*1000;
+  return entries.filter(e=>{
+    const d=e.exit_date?new Date(e.exit_date).getTime():e.close_id;
+    return (now-d)<cutoff;
+  });
+}
+
+async function renderJournal(){
+  const all=await fetch('/api/journal').then(r=>r.json()).catch(()=>[]);
+  const entries=filterByPeriod(all);
+  document.getElementById('journal-count').textContent=`${entries.length} İŞLEM`;
+
+  if(!entries.length){
+    document.getElementById('journal-stats-wrap').innerHTML='';
+    document.getElementById('mistake-analysis-wrap').innerHTML='';
+    document.getElementById('journal-list').innerHTML='<div class="port-empty">Henüz kapatılmış işlem yok</div>';
+    return;
+  }
+
+  // Stats
+  const wins=entries.filter(e=>e.realized_pnl>0);
+  const losses=entries.filter(e=>e.realized_pnl<=0);
+  const liqs=entries.filter(e=>e.is_liquidation);
+  const totalPnl=entries.reduce((s,e)=>s+e.realized_pnl,0);
+  const avgWin=wins.length?wins.reduce((s,e)=>s+e.realized_pnl,0)/wins.length:0;
+  const avgLoss=losses.length?losses.reduce((s,e)=>s+e.realized_pnl,0)/losses.length:0;
+  const winRate=entries.length?(wins.length/entries.length*100).toFixed(0):0;
+  const isTP=totalPnl>=0;
+  document.getElementById('journal-stats-wrap').innerHTML=`<div class="journal-stats">
+    <div class="jstat"><div class="jstat-label">TOPLAM K/Z</div><div class="jstat-val ${isTP?'up':'down'}">${isTP?'+':''}${fmtUSD(totalPnl)}</div></div>
+    <div class="jstat"><div class="jstat-label">WIN RATE</div><div class="jstat-val neutral">${winRate}%</div></div>
+    <div class="jstat"><div class="jstat-label">ORT. KAR</div><div class="jstat-val up">${fmtUSD(avgWin)}</div></div>
+    <div class="jstat"><div class="jstat-label">ORT. ZARAR</div><div class="jstat-val down">${fmtUSD(avgLoss)}</div></div>
+    <div class="jstat"><div class="jstat-label">KAZANAN</div><div class="jstat-val up">${wins.length}</div></div>
+    <div class="jstat"><div class="jstat-label">KAYBEDEN</div><div class="jstat-val down">${losses.length}</div></div>
+    <div class="jstat"><div class="jstat-label">LİKİDASYON</div><div class="jstat-val" style="color:var(--purple)">${liqs.length}</div></div>
+    <div class="jstat"><div class="jstat-label">İŞLEM</div><div class="jstat-val neutral">${entries.length}</div></div>
+  </div>`;
+
+  // Mistake analysis
+  const mistakeCounts={};
+  entries.forEach(e=>(e.mistakes||[]).forEach(m=>{mistakeCounts[m]=(mistakeCounts[m]||0)+1;}));
+  const sortedMistakes=Object.entries(mistakeCounts).sort((a,b)=>b[1]-a[1]);
+  if(sortedMistakes.length){
+    const maxCount=sortedMistakes[0][1];
+    document.getElementById('mistake-analysis-wrap').innerHTML=`<div class="mistake-section">
+      <div class="mistake-title">◆ HATA ANALİZİ — EN ÇOK YAPILAN HATALAR</div>
+      ${sortedMistakes.map(([m,c])=>`<div class="mistake-bar-row">
+        <div class="mistake-label">${m}</div>
+        <div class="mistake-bar"><div class="mistake-fill" style="width:${(c/maxCount*100).toFixed(0)}%"></div></div>
+        <div class="mistake-count">${c}x</div>
+      </div>`).join('')}
+    </div>`;
+  } else {
+    document.getElementById('mistake-analysis-wrap').innerHTML='';
+  }
+
+  // Journal entries
+  let html='';
+  entries.forEach(e=>{
+    const isW=e.realized_pnl>0;const wlCls=e.is_liquidation?'liq':isW?'win':'loss';
+    const pc=isW?'up':'down';const sign=isW?'+':'';
+    html+=`<div class="journal-item ${wlCls}">
+      <button class="ji-del" onclick="deleteJournal(${e.close_id})">✕</button>
+      <div class="ji-header">
+        <div class="ji-sym">${e.base}/USDT</div>
+        <div class="ji-badges">
+          <span class="pos-badge ${e.direction}">${e.direction==='long'?'▲':'▼'}</span>
+          <span class="pos-badge exch">${e.exchange}</span>
+          <span class="pos-badge lev">${e.leverage}x</span>
+          ${e.is_liquidation?'<span class="ji-liq-badge">⚡ LİK.</span>':''}
+        </div>
+        <div class="ji-pnl ${pc}">${sign}${fmtUSD(e.realized_pnl)} <span style="font-size:11px">(${sign}${e.pnl_pct}%)</span></div>
+      </div>
+      <div class="ji-dates">📅 ${fmtDate(e.entry_date)} → ${fmtDate(e.exit_date)}</div>
+      <div class="ji-reasons">
+        <div class="ji-reason"><div class="ji-reason-label">GİRİŞ</div><div class="ji-reason-val">${e.reason||'—'}</div></div>
+        <div class="ji-reason"><div class="ji-reason-label">ÇIKIŞ</div><div class="ji-reason-val">${e.exit_reason||'—'}</div></div>
+      </div>
+      ${(e.mistakes||[]).length?`<div class="ji-mistakes">${e.mistakes.map(m=>`<span class="ji-mistake-tag">${m}</span>`).join('')}</div>`:''}
+      ${e.exit_notes?`<div class="ji-notes">💬 ${e.exit_notes}</div>`:''}
+      <div style="display:flex;gap:8px;margin-top:5px;font-family:'Share Tech Mono';font-size:10px;color:var(--text-dim);">
+        <span>GİRİŞ: $${e.entry?.toLocaleString('en-US',{maximumFractionDigits:6})}</span>
+        <span>→</span>
+        <span>ÇIKIŞ: $${e.exit_price?.toLocaleString('en-US',{maximumFractionDigits:6})}</span>
+        <span>MARGİN: ${fmtUSD(e.margin)}</span>
+      </div>
+    </div>`;
+  });
+  document.getElementById('journal-list').innerHTML=html;
+}
+
+async function deleteJournal(close_id){await fetch(`/api/journal/${close_id}`,{method:'DELETE'});renderJournal();}
+
+// ══ ALARM ══════════════════════════════════════════════════════
+const ASSET_LABELS={'btc':'Bitcoin (BTC)','eth':'Ethereum (ETH)','xrp':'Ripple (XRP)','sp500':'S&P 500','gold':'Altın (XAU)','silver':'Gümüş (XAG)','oil':'Ham Petrol','dxy':'DXY','fg_above':'Fear&Greed','fg_below':'Fear&Greed'};
+function playAlarmSound(){try{const ctx=new(window.AudioContext||window.webkitAudioContext)();const beep=(freq,start,dur)=>{const o=ctx.createOscillator();const g=ctx.createGain();o.connect(g);g.connect(ctx.destination);o.frequency.value=freq;o.type='sine';g.gain.setValueAtTime(0.3,ctx.currentTime+start);g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+start+dur);o.start(ctx.currentTime+start);o.stop(ctx.currentTime+start+dur+0.1);};beep(880,0,.15);beep(1100,.2,.15);beep(880,.4,.15);beep(1320,.6,.3);}catch(e){}}
+
+function showToast(title,body,type=''){
+  const c=document.getElementById('toast-container');
+  const t=document.createElement('div');
+  t.className='toast'+(type==='green'?' green':'');
+  t.innerHTML=`<span class="toast-close" onclick="this.parentElement.remove()">✕</span><div class="toast-title">🔔 ${title}</div><div class="toast-body">${body}</div>`;
+  c.appendChild(t);
+  setTimeout(()=>{if(t.parentElement)t.remove();},8000);
+}
+
+async function addAlarm(){const asset=document.getElementById('af-asset').value;const cond=document.getElementById('af-cond').value;const val=parseFloat(document.getElementById('af-value').value);if(!val||isNaN(val)){showToast('HATA','Geçerli bir değer girin!');return;}const type=asset.startsWith('fg')?'fg':'price';const realAsset=asset==='fg_above'||asset==='fg_below'?'fg':asset;const realCond=asset==='fg_below'?'below':cond;await fetch('/api/alarms',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type,asset:realAsset,condition:realCond,value:val,label:ASSET_LABELS[asset]||asset})});document.getElementById('af-value').value='';renderAlarms();}
+async function renderAlarms(){const data=await fetch('/api/alarms').then(r=>r.json());const el=document.getElementById('alarm-list');document.getElementById('alarm-count').textContent=`${data.length} ALARM`;const tab=document.getElementById('alarm-tab');const fired=data.filter(a=>a.triggered);tab.innerHTML=fired.length>0?`🔔ALARM<span class="alarm-dot"></span>`:'🔔ALARM';if(!data.length){el.innerHTML='<div class="alarm-empty">Henüz alarm eklenmedi</div>';return;}let html='';data.forEach(a=>{const condLabel=a.condition==='above'?'▲ üzerine çıkarsa':'▼ altına düşerse';const condCls=a.condition==='above'?'above':'below';const statusHtml=a.triggered?`<div class="alarm-status alarm-fired">TETİKLENDİ!</div>`:`<div class="alarm-status alarm-waiting">BEKLİYOR</div>`;html+=`<div class="alarm-item ${a.triggered?'triggered':''} ${!a.active?'inactive':''}"><div class="alarm-toggle ${a.active?'on':''}" onclick="toggleAlarm(${a.id})"></div><div class="alarm-info"><div class="alarm-asset">${a.label||a.asset.toUpperCase()}</div><div class="alarm-cond ${condCls}">${condLabel} ${a.value.toLocaleString()}</div></div>${statusHtml}${a.triggered?`<button class="alarm-del" onclick="resetAlarm(${a.id})" style="background:rgba(0,232,122,0.08);border-color:rgba(0,232,122,0.2);color:var(--green);">SIFIRLA</button>`:`<button class="alarm-del" onclick="deleteAlarm(${a.id})">SİL</button>`}</div>`;});el.innerHTML=html;}
+async function toggleAlarm(id){await fetch(`/api/alarms/${id}/toggle`,{method:'POST'});renderAlarms();}
+async function deleteAlarm(id){await fetch(`/api/alarms/${id}`,{method:'DELETE'});renderAlarms();}
+async function resetAlarm(id){await fetch(`/api/alarms/${id}/reset`,{method:'POST'});renderAlarms();}
+async function checkTriggered(){try{const fired=await fetch('/api/alarms/triggered').then(r=>r.json());fired.forEach(a=>{showToast('ALARM TETİKLENDİ',`${a.label||a.asset.toUpperCase()} ${a.condition==='above'?'üzerine çıktı':'altına düştü'}: ${a.value.toLocaleString()}`);playAlarmSound();});if(fired.length)renderAlarms();}catch{}}
+
+// ══ STATE & FETCH ════════════════════════════════════════════
+const state={crypto:null,charts:{btc:null,eth:null,xrp:null},feargreed:null,funding:null,dominance:null,market:null,newsMarket:null,newsCrypto:null};
+async function apiFetch(p){const r=await fetch(p);if(!r.ok)throw new Error(r.status);return r.json();}
+async function fetchCrypto(){try{state.crypto=await apiFetch('/api/crypto');renderCrypto();document.getElementById('crypto-time').textContent=istTS();}catch{}}
+async function fetchChart(s){try{state.charts[s]=await apiFetch(`/api/chart/${s}`);redrawChart(s);}catch{}}
+async function fetchFearGreed(){try{state.feargreed=await apiFetch('/api/feargreed');renderFearGreed();}catch{}}
+async function fetchFunding(){try{state.funding=await apiFetch('/api/funding');renderBtcMetrics();}catch{}}
+async function fetchDominance(){try{state.dominance=await apiFetch('/api/dominance');renderBtcMetrics();}catch{}}
+async function fetchMarket(){try{state.market=await apiFetch('/api/market');renderMarket();document.getElementById('market-time').textContent=istTS();}catch{}}
+async function fetchNews(){try{state.newsMarket=await apiFetch('/api/news');if(activeNewsTab===0)applyFilter();updateBaro();}catch{}}
+async function fetchCryptoNews(){try{state.newsCrypto=await apiFetch('/api/cryptonews');if(activeNewsTab===1)applyFilter();updateBaro();}catch{}}
+function updateBaro(){renderBarometer(computeBarometer(state.newsMarket,state.newsCrypto));}
+
+function renderExchanges(){const list=document.getElementById('exchange-list');let html='',openCount=0,lastRegion='';EXCHANGES.forEach(ex=>{if(ex.region&&ex.region!==lastRegion){lastRegion=ex.region;html+=`<div class="region-row">${ex.region}</div>`;}const st=getStatus(ex);if(st.key==='open')openCount++;const rowCls=st.key==='open'?'is-open':st.key==='lunch'?'is-lunch':'';const oIst=toIst(ex.tz,ex.open.h,ex.open.m),cIst=toIst(ex.tz,ex.close.h,ex.close.m);let hrs=`${hm(oIst.h,oIst.m)} – ${hm(cIst.h,cIst.m)}`;if(ex.lunch){const lsI=toIst(ex.tz,ex.lunch.start.h,ex.lunch.start.m),leI=toIst(ex.tz,ex.lunch.end.h,ex.lunch.end.m);hrs+=`<br><span style="font-size:9px;color:var(--text-dim)">öğle ${hm(lsI.h,lsI.m)}–${hm(leI.h,leI.m)}</span>`;}const subHtml=st.sub?`<div class="ex-countdown ${st.subCls||''}">${st.sub}</div>`:'';let chartHtml='';if(st.key==='open'){const sp=generateSparkData(ex.id,st.progress);const cls=sp.isUp?'up':'down';const pct=(st.progress*100).toFixed(1);chartHtml=`<div class="ex-chart"><div class="chart-top"><span class="chart-change ${cls}">${sp.isUp?'+':''}${sp.pctChange}%</span><span class="chart-session-label">SEANS %${pct}</span></div><div class="sparkline-wrap">${buildSparkSVG(sp,390,36)}</div><div class="session-bar-wrap"><div class="session-bar-fill ${cls}" style="width:${pct}%"></div></div></div>`;}html+=`<div class="ex-row ${rowCls}"><div class="ex-main"><div class="ex-indicator"><div class="status-dot ${st.key}"></div><div class="ex-flag">${ex.flag}</div></div><div><div class="ex-name">${ex.name}</div><div class="ex-index">${ex.index}</div></div><div class="ex-right"><div class="ex-status ${st.key}">${st.label}</div><div class="ex-hours">${hrs}</div>${subHtml}</div></div>${chartHtml}</div>`;});list.innerHTML=html;const now=new Date().toLocaleTimeString('tr-TR',{timeZone:'Europe/Istanbul',hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'});document.getElementById('last-update').textContent=`SON GÜNCELLEME: ${now}`;const badge=document.getElementById('open-badge');badge.textContent=`${openCount}/${EXCHANGES.length} AÇIK`;badge.className='open-badge'+(openCount===0?' none':'');document.getElementById('active-markets').textContent=openCount>0?`${openCount} AKTİF`:'KAPALI';}
+
+const COINS=[{id:'bitcoin',sym:'btc',name:'Bitcoin',symbol:'BTC',icon:'₿',dec:0},{id:'ethereum',sym:'eth',name:'Ethereum',symbol:'ETH',icon:'Ξ',dec:2},{id:'ripple',sym:'xrp',name:'Ripple XRP',symbol:'XRP',icon:'✕',dec:4}];
+function renderCrypto(){const el=document.getElementById('crypto-list');if(!state.crypto){el.innerHTML='<div class="loading">YÜKLENİYOR</div>';return;}let html='';COINS.forEach(c=>{const d=state.crypto[c.id];const price=d?.usd||0,chg=d?.usd_24h_change||0;const cls=chg>=0?'up':'down';html+=`<div class="crypto-coin"><div class="coin-header"><div class="coin-left"><div class="coin-icon">${c.icon}</div><div><div class="coin-name">${c.name}</div><div class="coin-sym">${c.symbol}/USDT · 4H</div></div></div><div class="coin-right"><div class="coin-price">$${fmtPrice(price,c.dec)}</div><div class="coin-chg ${cls}">${chg>=0?'+':''}${chg.toFixed(2)}% 24sa</div></div></div><div class="coin-chart-wrap" id="cwrap-${c.sym}"><canvas id="chart-${c.sym}"></canvas><div class="chart-overlay">BİNANCE · 4H · 60 MUMU</div></div></div>`;});el.innerHTML=html;COINS.forEach(c=>{if(state.charts[c.sym])redrawChart(c.sym);});}
+function redrawChart(s){const cv=document.getElementById(`chart-${s}`);if(cv&&state.charts[s])drawCandles(cv,state.charts[s]);}
+function renderMarket(){const el=document.getElementById('market-list');if(!state.market){el.innerHTML='<div class="loading">YÜKLENİYOR</div>';return;}const items=[{key:'sp500',icon:'📈'},{key:'gold',icon:'🥇'},{key:'silver',icon:'🥈'},{key:'oil',icon:'🛢️'},{key:'dxy',icon:'💵'}];let html='<div class="market-grid">';items.forEach(item=>{const d=state.market[item.key];if(!d||d.price===0){html+=`<div class="market-card"><div class="mcard-name">${item.icon} ${item.key.toUpperCase()}</div><div class="mcard-price" style="font-size:13px;color:var(--text-dim)">VERİ YOK</div></div>`;return;}const{name,price,prev}=d;const chg=prev?((price-prev)/prev*100):0;const cls=chg>0?'up':chg<0?'down':'flat';html+=`<div class="market-card"><div class="mcard-name">${item.icon} ${name}</div><div class="mcard-price">${fmtPrice(price,2)}</div><div class="mcard-chg ${cls}">${chg>0?'+':''}${chg.toFixed(2)}%</div></div>`;});html+='</div>';el.innerHTML=html;}
+function renderFearGreed(){const el=document.getElementById('fg-section');const fg=state.feargreed;if(!fg){el.innerHTML='<div class="loading">YÜKLENİYOR</div>';return;}const col=fg.value<25?'#ff2255':fg.value<45?'#ff6600':fg.value<55?'#ffaa00':fg.value<75?'#88cc22':'#00e87a';el.innerHTML=`<div class="sent-block" style="padding:11px 16px 13px;"><div class="fg-wrap"><canvas id="fg-canvas"></canvas><div class="fg-cls" style="color:${col}">${fg.label.toUpperCase()}</div></div></div>`;const cv=document.getElementById('fg-canvas');if(cv)drawFearGreed(cv,fg.value);}
+function renderBtcMetrics(){const el=document.getElementById('btc-metrics');const dom=state.dominance,fund=state.funding;if(!dom&&!fund){el.innerHTML='<div class="loading">YÜKLENİYOR</div>';return;}let html='<div class="sent-block">';if(dom){const dc=dom.btc_dominance>55?'var(--green)':dom.btc_dominance<45?'var(--red)':'var(--white)';const mt=(dom.total_mcap/1e12).toFixed(2);html+=`<div class="sent-row"><span class="sent-label">BTC DOMINANCE</span><span class="sent-val" style="color:${dc}">${dom.btc_dominance}%</span></div><div class="sent-row"><span class="sent-label">TOPLAM PİYASA</span><span class="sent-val">$${mt}T</span></div>`;}if(fund){const fc=fund.rate>0?'var(--green)':fund.rate<0?'var(--red)':'var(--text-dim)';html+=`<div class="sent-row"><span class="sent-label">BTC FUNDING RATE</span><span class="sent-val" style="color:${fc}">${fund.rate>0?'+':''}${fund.rate}%<span style="font-size:10px;color:var(--text-dim)"> /8sa</span></span></div>`;}html+='</div>';el.innerHTML=html;}
+function renderCalendar(){const el=document.getElementById('calendar-section');const now=new Date();now.setHours(0,0,0,0);const events=ALL_EVENTS.filter(e=>new Date(e.date+' 00:00')>=now).slice(0,8);if(!events.length){el.innerHTML='<div class="err">Yaklaşan etkinlik yok</div>';return;}let html='';events.forEach(ev=>{const d=new Date(ev.date+' 00:00');const diff=Math.ceil((d-now)/(1000*60*60*24));const dayLabel=diff===0?'BUGÜN':diff===1?'YARIN':`${diff} GÜN SONRA`;const dateStr=d.toLocaleDateString('tr-TR',{day:'numeric',month:'short'}).toUpperCase();html+=`<div class="cal-event"><div class="cal-date">${dateStr}</div><div class="cal-badge ${ev.type}">${ev.type}</div><div><div class="cal-desc">${ev.desc}</div><div class="cal-days">${dayLabel}</div></div></div>`;});el.innerHTML=html;}
+
+function switchTab(n){
+  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',i===n));
+  document.querySelectorAll('.panel').forEach((p,i)=>p.classList.toggle('active',i===n));
+  if(n===1)setTimeout(()=>COINS.forEach(c=>redrawChart(c.sym)),60);
+  if(n===5){setDefaultDate();refreshPortfolio();}
+  if(n===6)renderJournal();
+  if(n===7)renderAlarms();
+}
+function switchNews(n){activeNewsTab=n;document.querySelectorAll('.news-tab').forEach((t,i)=>t.classList.toggle('active',i===n));document.getElementById('news-market').style.display=n===0?'block':'none';document.getElementById('news-crypto').style.display=n===1?'block':'none';applyFilter();}
+function updateClock(){const now=new Date();const full=now.toLocaleTimeString('tr-TR',{timeZone:'Europe/Istanbul',hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'});document.getElementById('clock').innerHTML=`${full.slice(0,5)}<span class="secs">:${full.slice(6,8)}</span>`;const date=now.toLocaleDateString('tr-TR',{timeZone:'Europe/Istanbul',weekday:'long',day:'numeric',month:'long',year:'numeric'});document.getElementById('clock-date').textContent=date.toUpperCase();}
+
+function init(){
+  updateClock();renderExchanges();renderCalendar();renderChecklist();loadSymbols();
+  setTimeout(fetchCrypto,600);setTimeout(()=>fetchChart('btc'),900);setTimeout(()=>fetchChart('eth'),1200);setTimeout(()=>fetchChart('xrp'),1500);
+  setTimeout(fetchFearGreed,1800);setTimeout(fetchFunding,2100);setTimeout(fetchDominance,2400);
+  setTimeout(fetchMarket,2700);setTimeout(fetchNews,3200);setTimeout(fetchCryptoNews,4200);
+  setInterval(updateClock,1000);setInterval(renderExchanges,60000);
+  setInterval(fetchCrypto,30000);setInterval(()=>{fetchChart('btc');fetchChart('eth');fetchChart('xrp');},300000);
+  setInterval(fetchFearGreed,600000);setInterval(fetchFunding,60000);setInterval(fetchDominance,300000);
+  setInterval(fetchMarket,120000);setInterval(fetchNews,300000);setInterval(fetchCryptoNews,300000);
+  setInterval(checkTriggered,10000);setInterval(renderAlarms,15000);
+  setInterval(refreshPortfolio,30000);
+}
+init();
+</script>
+</body>
+</html>
